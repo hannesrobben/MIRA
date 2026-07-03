@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mira"
+version = "0.1.0"
+description = "MIRA - Microscopy Image Registration & Analysis"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+
+authors = [
+    { name = "Your Name" }
+]
+
+keywords = [
+    "digital holography",
+    "microscopy",
+    "image processing",
+    "phase retrieval",
+    "segmentation",
+    "visualization"
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent"
+]
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "opencv-python",
+    "scikit-image",
+    "scikit-learn",
+    "pandas",
+    "pillow"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "yapf",
+    "numpydoc",
+]
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/hannesrobben/MIRA"
+Repository = "https://github.com/hannesrobben/MIRA"
+Issues = "https://github.com/hannesrobben/MIRA/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+
+[tool.coverage.run]
+source = ["mira"]
