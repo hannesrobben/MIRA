@@ -10,10 +10,10 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Tuple, Union, Literal
+from typing import Tuple, Union, Literal, Optional
 from dataclasses import dataclass, field
 from enum import Enum
-from scipy.ndimage import shift, zoom
+from scipy.ndimage import shift, zoom, rotate
 
 
 class Axis(Enum):
@@ -57,6 +57,7 @@ class ImageData:
 
     data: np.ndarray
     pixel_size: Tuple[float, float] = field(default=(1.0, 1.0))
+    data_upsidedown: bool = field(default=False)
     _flipped: bool = field(default=False, init=False)
 
     def __post_init__(self) -> None:
@@ -65,6 +66,9 @@ class ImageData:
         # Store a copy of the original data and pixel size for reference
         self.original_data = self.data.copy()
         self.original_pixel_size = self.pixel_size
+
+        if self.data_upsidedown:
+            self.mirror_horizontal()
 
     def _validate_input(self) -> None:
         """
@@ -176,6 +180,56 @@ class ImageData:
         self._flipped = not self._flipped
         # Also flip pixel size to maintain physical dimensions
         self.pixel_size = (self.pixel_size[1], self.pixel_size[0])
+
+    def rotation(
+        self,
+        degree: float,
+        reshape: bool = False,
+        mode: str = "constant",
+        cval: float = 0.0,
+    ) -> None:
+        """
+        Rotate the image data by an arbitrary angle.
+
+        This operation is performed in-place. For positive angles the array
+        is rotated clockwise when viewed with row 0 at the top (i.e. the
+        same convention as scipy.ndimage.rotate on a (row, col) array).
+
+        Args:
+            degree: Rotation angle in degrees.
+            reshape: If True, the output shape is adapted so the entire
+                rotated image fits (array grows). If False (default), the
+                output keeps the original shape and corners are clipped -
+                this keeps pixel_size physically meaningful.
+            mode: How to fill points outside the input boundaries
+                (see scipy.ndimage.rotate documentation).
+            cval: Fill value used when mode="constant".
+
+        Raises:
+            ProcessingError: If rotation fails.
+        """
+        try:
+            self.data = rotate(
+                self.data, angle=degree, reshape=reshape, mode=mode, cval=cval
+            )
+        except Exception as e:
+            raise ProcessingError(f"Error rotating data: {str(e)}")
+
+    def mirror_vertical(self) -> None:
+        """
+        Flip the image data top-to-bottom (mirror across the horizontal axis).
+
+        This operation is performed in-place.
+        """
+        self.data = np.flipud(self.data)
+
+    def mirror_horizontal(self) -> None:
+        """
+        Flip the image data left-to-right (mirror across the vertical axis).
+
+        This operation is performed in-place.
+        """
+        self.data = np.fliplr(self.data)
 
     def get_profile(
         self, axis: Union[Axis, str], location: Union[Literal["mid"], int]
@@ -395,3 +449,51 @@ class ImageData:
         pixel_info_path = file_path.with_name(f"{file_path.stem}_pixel_info.txt")
         with open(pixel_info_path, "w") as f:
             f.write(f"pixel_size = {self.pixel_size}\n")
+
+    def save_compressed(
+        self,
+        save_path: Union[str, Path],
+        file_title: Optional[str] = None,
+    ) -> Path:
+        """
+        Speichert die Daten als komprimierte .npz-Datei.
+
+        Args:
+            save_path: Zielpfad, in dem die Datei gespeichert wird.
+            file_title: Optionaler Dateiname. Falls None, wird
+                        'masked_array.npz' verwendet.
+
+        Returns:
+            Path zur gespeicherten Datei.
+        """
+
+        save_path = Path(save_path)
+
+        # Zielordner erstellen, falls nicht vorhanden
+        save_path.mkdir(parents=True, exist_ok=True)
+
+        # Standard-Dateiname
+        if file_title is None:
+            file_title = "masked_array"
+
+        # Korrekte Endung sicherstellen
+        if not file_title.lower().endswith(".npz"):
+            file_title += ".npz"
+
+        # Vollständigen Dateipfad erstellen
+        file_path = save_path / file_title
+
+        # Speichern
+        if isinstance(self.data, np.ma.MaskedArray):
+            np.savez_compressed(
+                file_path,
+                data=self.data.data,
+                mask=self.data.mask,
+            )
+        else:
+            np.savez_compressed(
+                file_path,
+                data=self.data,
+            )
+
+        return file_path

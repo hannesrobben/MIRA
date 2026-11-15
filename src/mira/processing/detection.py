@@ -136,7 +136,7 @@ def threshold_detection(
         else:
             raise ValidationError(f"Unknown threshold method: {threshold_method}")
 
-        print(threshold)
+        # print(threshold)
 
         # Apply threshold to create mask
         mask = data > threshold
@@ -152,81 +152,229 @@ def threshold_detection(
 def intensity_detection(
     data: np.ndarray,
     intensity_data: np.ndarray,
-    edge_threshold: float = 0.3,
+    smoothing_sigma: float = 2.0,
+    border_width: Optional[int] = None,
+    low_threshold_ratio: float = 0.4,
+    seed_gap_closing: Optional[int] = None,
+    safety_margin_px: int = 0,
     min_size: int = 100,
     **kwargs,
 ) -> np.ndarray:
     """
-    Detect structure using edge detection on intensity data.
+    Detect structure using marker-controlled watershed segmentation on the
+    intensity image, with hysteresis-thresholded edges for marker seeding.
+
+    Why watershed instead of "find edges, then close + fill":
+    The original approach detected edges (Sobel), tried to morphologically
+    close small gaps in them, and then filled whatever region that closed
+    contour enclosed. This only works if the edge forms an unbroken loop --
+    a single gap (a weak-contrast stretch of boundary, a speckle dropout)
+    lets "inside" leak into "outside", so `binary_fill_holes` has nothing to
+    fill and you're left with disconnected edge fragments.
+
+    Marker-controlled watershed reframes this as a flooding problem instead
+    of a contour-closing problem. The (smoothed) intensity gradient is a
+    terrain: ridges follow the true structure boundary, valleys are the
+    flat interior/background. Two "water sources" flood it simultaneously
+    -- one seeded in the outer border (assumption - near border = always
+    background), one seeded inside the structure -- and every pixel gets
+    claimed by whichever source reaches it first (lowest cumulative
+    "elevation" along the path). The result is a complete, filled
+    partition of the image by construction, with no separate "fill the
+    hole" step to fail, and no assumption about the structure's geometry.
+
+    Why hysteresis thresholding for finding the interior seed (instead of
+    thresholding the intensity itself, or a single hard gradient cutoff):
+    On real measurement data the interior of a cell and the background
+    often sit at nearly the same *intensity level* -- only the boundary
+    line differs, so thresholding intensity directly (e.g. Otsu) tends to
+    pick out an unrelated bright/dark patch (measurement artifact) rather
+    than the structure. And a single global gradient cutoff has the same
+    fragility as your original `edge_threshold`: one weak stretch of the
+    real boundary (contrast dips below the cutoff for a while, e.g. from a
+    local measurement artifact) breaks the loop there and leaks the
+    interior to the border. `skimage.filters.apply_hysteresis_threshold`
+    (the same idea Canny uses internally) fixes this: a pixel is kept if
+    it clears the high threshold OR if it's connected, via other above-low
+    pixels, to one that does. A weak-but-continuous stretch of boundary
+    survives because it's chained to strong stretches elsewhere, without
+    lowering the threshold everywhere (which would let background texture
+    through too). This is also why your Canny attempts likely underwhelmed
+    Sobel: Canny's hysteresis is only as good as the two threshold values
+    it's given, and its defaults aren't scaled to your data's gradient
+    range -- here both are derived adaptively from the image itself (Otsu
+    for the high threshold, a fraction of it for the low one).
+
+    A second real effect on this kind of grating/cell structure: every
+    sub-cell is individually outlined, not just the outer perimeter, so
+    "the single largest region enclosed by edges" is just one cell, not
+    the whole footprint. The fix is to seed the foreground marker from the
+    *union* of every edge-enclosed region that isn't connected to the
+    border -- all cells together -- and let watershed grow that union
+    outward to the true outer boundary and swallow the thin dividing lines
+    between cells, producing one connected filled area.
+
+    If the structure runs off the edge of the frame (breaking the
+    background-at-border assumption), a warning is raised.
 
     Args:
-        data: Phase/height data
-        intensity_data: Intensity image used for edge detection
-        edge_threshold: Threshold for edge detection
-        min_size: Minimum structure size in pixels
+        data: Phase/height data (only used for shape validation; kept for
+            API compatibility with `detect_structure`)
+        intensity_data: Intensity image used for segmentation
+        smoothing_sigma: Gaussian smoothing applied before computing the
+            gradient, to suppress speckle/measurement noise.
+        border_width: Width (px) of the outer frame used as the
+            guaranteed-background marker. Defaults to ~2% of the smaller
+            image dimension.
+        low_threshold_ratio: Hysteresis low threshold, as a fraction of
+            the (Otsu-derived) high threshold. Lower values bridge bigger
+            gaps in the boundary but risk pulling in background texture;
+            0.3-0.5 is a reasonable range to try.
+        seed_gap_closing: Small dilation (px) applied to the hysteresis
+            edge mask purely to bridge pixel-level gaps when identifying
+            enclosed (non-border-connected) regions for seeding -- this
+            does NOT affect the final boundary, which is refined by
+            watershed on the un-dilated gradient. Defaults to ~1% of the
+            smaller image dimension (at least 2px).
+        safety_margin_px: Grows the final mask outward by this many pixels
+            (isotropically, via a disk-shaped structuring element) after
+            detection. Use this to keep background-only operations safely
+            away from the structure boundary -- e.g. `safety_margin_px=10`
+            means every "background" pixel is guaranteed at least 10 px
+            from the true edge, at every point around the structure (not
+            just along straight stretches -- a plain iterated dilation
+            with the default cross-shaped structuring element would grow
+            a diamond and under-cover the margin near corners, which is
+            exactly where a multi-corner structure like yours needs it
+            most). 0 (default) disables it -- returns the mask as
+            detected.
+        min_size: Kept for API compatibility; final cleanup (hole filling,
+            largest-component selection) is done by `clean_structure_mask`.
         **kwargs: Additional parameters (ignored)
 
     Returns:
-        Boolean mask (True where structure is detected)
+        Boolean mask (True where structure is -- including the safety
+        margin, if set)
 
     Raises:
-        ProcessingError: If detection fails
+        ProcessingError: If detection fails or scikit-image is unavailable
+        ValidationError: If inputs are invalid
     """
     try:
-        # Ensure data shapes match
-        if data.shape != intensity_data.shape:
-            raise ValidationError(
-                f"Data shapes don't match: {data.shape} vs {intensity_data.shape}"
+        from skimage.filters import sobel, threshold_otsu, apply_hysteresis_threshold
+        from skimage.segmentation import watershed
+        from skimage.morphology import disk
+        from scipy.ndimage import (
+            gaussian_filter,
+            binary_dilation,
+            binary_fill_holes,
+            label,
+        )
+    except ImportError:
+        raise ProcessingError(
+            "Intensity-based detection requires scikit-image "
+            "(marker-controlled watershed, hysteresis thresholding)."
+        )
+
+    # Ensure data shapes match
+    if data.shape != intensity_data.shape:
+        raise ValidationError(
+            f"Data shapes don't match: {data.shape} vs {intensity_data.shape}"
+        )
+
+    try:
+        h, w = intensity_data.shape
+        min_dim = min(h, w)
+        if border_width is None:
+            border_width = max(2, int(round(0.02 * min_dim)))
+        if seed_gap_closing is None:
+            seed_gap_closing = max(2, int(round(0.01 * min_dim)))
+
+        # 1. Suppress measurement noise before computing the gradient
+        smoothed = gaussian_filter(intensity_data.astype(float), sigma=smoothing_sigma)
+
+        # 2. "Elevation map" that watershed floods across -- edges become ridges.
+        #    This is the landscape used for the FINAL boundary -- always the
+        #    un-dilated, un-thresholded gradient, so the result isn't limited
+        #    to the resolution of the binary edge mask below.
+        elevation = sobel(smoothed)
+
+        # 3. Guaranteed-background marker: an outer frame (your stated assumption)
+        border_mask = np.zeros(intensity_data.shape, dtype=bool)
+        border_mask[:border_width, :] = True
+        border_mask[-border_width:, :] = True
+        border_mask[:, :border_width] = True
+        border_mask[:, -border_width:] = True
+
+        # 4. Hysteresis-thresholded edges: robust to locally weak/dashed
+        #    stretches of the real boundary (see docstring)
+        high_thresh = threshold_otsu(elevation)
+        low_thresh = low_threshold_ratio * high_thresh
+        edge_mask = apply_hysteresis_threshold(elevation, low_thresh, high_thresh)
+
+        # 5. Foreground marker: the union of every edge-enclosed region that
+        #    is NOT connected to the border -- i.e. every individual cell,
+        #    combined -- found via a small dilation purely for gap-bridging
+        closed_edges = binary_dilation(edge_mask, iterations=seed_gap_closing)
+        non_edge = ~closed_edges
+        labeled_regions, _ = label(non_edge)
+        border_labels = set(np.unique(labeled_regions[border_mask])) - {0}
+        foreground_seed = non_edge.copy()
+        for bl in border_labels:
+            foreground_seed[labeled_regions == bl] = False
+
+        if not foreground_seed.any():
+            raise ProcessingError(
+                "Could not find any interior seed region -- every "
+                "edge-enclosed area is connected to the border. Try "
+                "lowering low_threshold_ratio, or check that the "
+                "structure doesn't run off the image edge."
             )
 
-        # Calculate edges using Canny edge detection
-        try:
-            from skimage.feature import canny
+        # Sanity check on the border-is-background assumption
+        border_overlap_fraction = edge_mask[border_mask].mean()
+        if (~foreground_seed | edge_mask)[
+            border_mask
+        ].all() and border_overlap_fraction > 0.3:
+            import warnings
 
-            edges = canny(intensity_data, sigma=1.0)
-        except ImportError:
-            # Fallback to Sobel edge detection
-            from scipy import ndimage
+            warnings.warn(
+                "The border is densely covered in detected edges -- the "
+                "structure may extend past the image edge, which breaks "
+                "the background-at-border assumption this method relies on.",
+                stacklevel=2,
+            )
 
-            sx = ndimage.sobel(intensity_data, axis=0)
-            sy = ndimage.sobel(intensity_data, axis=1)
-            edges = np.hypot(sx, sy) > edge_threshold * np.max(np.hypot(sx, sy))
+        # 6. Flood both markers across the true gradient landscape; where
+        #    they meet becomes the boundary, and every pixel is assigned
+        markers = np.zeros(intensity_data.shape, dtype=np.int32)
+        markers[border_mask] = 1  # background
+        markers[foreground_seed] = 2  # structure
+        labels = watershed(elevation, markers)
+        mask = labels == 2
 
-        # Fill enclosed regions
-        try:
-            from skimage.morphology import binary_closing, remove_small_objects
-            from scipy.ndimage import binary_fill_holes
+        # 7. Fill any remaining small internal holes and keep the largest
+        #    connected component (also done downstream by
+        #    `clean_structure_mask`, but kept here so this function returns
+        #    a clean, usable mask on its own)
+        filled = binary_fill_holes(mask)
+        labeled_final, num_final = label(filled)
+        if num_final == 0:
+            result = filled
+        else:
+            sizes = np.bincount(labeled_final.ravel())
+            sizes[0] = 0
+            result = labeled_final == np.argmax(sizes)
 
-            # Close gaps in edges
-            closed_edges = binary_closing(edges)
+        # 8. Optional safety margin: grow the mask outward isotropically so
+        #    background-only operations stay clear of the true boundary
+        if safety_margin_px > 0:
+            result = binary_dilation(result, structure=disk(safety_margin_px))
 
-            # Fill holes
-            filled = binary_fill_holes(closed_edges)
-
-            # Remove small objects
-            mask = remove_small_objects(filled, min_size=min_size)
-
-        except ImportError:
-            # Fallback using scipy
-            from scipy.ndimage import binary_closing, binary_fill_holes, label
-
-            # Close gaps in edges
-            closed_edges = binary_closing(edges)
-
-            # Fill holes
-            filled = binary_fill_holes(closed_edges)
-
-            # Remove small objects
-            labeled, num = label(filled)
-            sizes = np.bincount(labeled.ravel())
-            mask_sizes = sizes > min_size
-            mask_sizes[0] = 0  # Don't remove background
-            mask = mask_sizes[labeled]
-
-        return mask
+        return result
 
     except Exception as e:
-        if isinstance(e, ValidationError):
+        if isinstance(e, (ProcessingError, ValidationError)):
             raise
         raise ProcessingError(f"Intensity-based detection failed: {str(e)}")
 

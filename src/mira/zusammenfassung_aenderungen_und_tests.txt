@@ -1,0 +1,224 @@
+MIRA-INTEGRATION: GESAMTUEBERSICHT DER AENDERUNGEN UND TESTCHECKLISTE
+====================================================================
+Diese Datei fasst ALLE Aenderungen aus der gesamten Session zusammen,
+in der Reihenfolge, in der sie entstanden sind. Fuer die Erlaeuterung
+des geplanten Zernike/PSD-Wrappers und weitere offene Architekturfragen
+siehe die separate Datei "offene_punkte_und_zernike_psd_wrapper.txt".
+
+--------------------------------------------------------------------
+TEIL 1: WAS GEAENDERT WURDE
+--------------------------------------------------------------------
+
+1. Bland-Altman-Plot
+   Datei: bland_altman_snippet.py (eigenstaendig, fuer investigation.py)
+   Funktion: plot_bland_altman() - Bias + Limits of Agreement zwischen
+   zwei Messmethoden (z.B. predicted vs. Sensofar-Hoehe), robust gegen
+   NaN, mit Shape-Validierung.
+   Update: Maskierte Arrays wurden anfangs faelschlich entmaskiert (siehe
+   Bugfix in Teil 3) - inzwischen korrigiert.
+
+2. delta_n-Kalibrierung (Brechungsindex-Fit)
+   Dateien:
+     - calibration.py -> mira/processing/calibration.py
+     - structure_py_additions.py -> Ergaenzung fuer core/structure.py
+     - processor_py_additions.py -> Ergaenzung fuer processor.py
+   Funktion: StructureProcessor.calculate_delta_n(reference, ...) - fittet
+   delta_n segmentbasiert (Phase vs. Referenzhoehe), mit Pixel-Offset-
+   Erosion an Segmentraendern (Segment.erode_by_pixels(),
+   Background.erode_by_pixels()), Background-relativen Werten, und
+   erweiterbarem Methoden-Registry (aktuell: "segment_mean").
+
+3. Gemeinsame Segment-Statistik-Basis (Refactor)
+   Dateien:
+     - segment_data.py -> mira/analysis/segment_data.py
+     - calibration_py_patch.py -> Patch fuer calibration.py
+   Funktion: extract_segment_statistics(), paired_segment_values() -
+   die Segment-Extraktion/Erosion/Background-relativ-Logik wurde aus
+   calibration.py herausgezogen, damit delta_n-Fit UND Regression
+   dieselbe Quelle nutzen statt sie zu duplizieren.
+
+4. Lineare Regression
+   Dateien:
+     - comparison.py -> mira/analysis/comparison.py
+     - plotter_stats.py -> mira/visualization/plotter_stats.py (neu
+       angelegt, erste Funktion)
+   Funktion: fit_linear_regression() (generisch) und
+   fit_segment_regression() (segmentbasiert, nutzt segment_data.py) +
+   plot_regression(). Ersetzt die drei Dubletten aus den Altdateien
+   (calculate_linear_regression_metrics / _old / _dhm).
+
+5. info-Dict und statistics-Dict auf Structure
+   Dateien:
+     - structure_py_additions_2.py -> Ergaenzung fuer core/structure.py
+     - serialization.py -> mira/utils/serialization.py (neu)
+     - segmentation_py_patch.py -> Patch fuer processing/segmentation.py
+     - processor_py_patch_2.py -> Patch fuer calculate_delta_n() in
+       processor.py
+   Funktion: Structure.info (Dimensionen + frei setzbare IDs wie doe_id/
+   print_id, via set_info()/refresh_info()) und Structure.statistics
+   (Analyseergebnisse wie DeltaNResult, via add_statistic()/
+   statistics_summary()). to_json_safe() wandelt Dataclasses/NumPy-Werte
+   rekursiv in reine Python-Typen fuer JSON-Export um.
+   segment_structure() traegt Grid-Shape automatisch ins info-Dict ein;
+   calculate_delta_n() traegt sein Ergebnis automatisch ins
+   statistics-Dict ein.
+
+6. Ensemble-DataFrame fuer mehrere Drucke/DOEs (Punkt 6)
+   Datei: ensemble.py -> mira/analysis/ensemble.py
+   Funktion: structure_to_records(), build_ensemble_dataframe() (nutzt
+   structure.info fuer ID-Spalten), summarize_by_group() (Mean/Std/CV
+   je Gruppe, z.B. je Segment ueber mehrere Drucke). Neue Abhaengigkeit:
+   pandas.
+
+7. Snapshot-Persistenz fuer info/statistics
+   Datei: structure_py_snapshot_patch.py -> Patch fuer core/structure.py
+   Funktion: _mask_payload()/_from_mask_payload() speichern/laden info
+   und statistics jetzt mit (als JSON-String im npz, wie das bestehende
+   metadata_json-Muster). Betrifft automatisch sowohl
+   Structure.save_compressed()/load_compressed() als auch
+   StructureProcessor.save_snapshot()/load_snapshot(), da beide dieselben
+   Helper nutzen. Rueckwaertskompatibel zu alten Dateien ohne diese Keys.
+   Bekannte Einschraenkung: statistics kommt nach dem Laden als reines
+   JSON-Dict zurueck, nicht mehr als das urspruengliche Dataclass-Objekt
+   (z.B. DeltaNResult) - bei Bedarf manuell rekonstruieren, z.B.
+   DeltaNResult(**geladenes_dict).
+
+8. Fehler vs. lokale Steigung/Kruemmung (Punkt 3)
+   Dateien:
+     - topology.py -> mira/analysis/topology.py
+     - plotter_stats_patch.py -> Ergaenzung fuer plotter_stats.py
+   Funktion: analyze_error_vs_topology() korreliert eine Fehlerkarte mit
+   dem lokalen Gradientenbetrag und der Kruemmung (Laplace) einer
+   Referenzflaeche (Pearson-r + gebinnte Mittelwertkurve), um zu pruefen,
+   ob Fehler zufaellig oder an Kanten/Flanken konzentriert ist.
+   plot_error_vs_topology() zeigt beide Kurven mit Pixelanzahl je Bin.
+
+9. Sensitivitaetsanalyse n_resin/n_air (Punkt 7)
+   Dateien:
+     - sensitivity.py -> mira/analysis/sensitivity.py
+     - plotter_stats_patch_2.py -> Ergaenzung fuer plotter_stats.py
+   Funktion: propagate_delta_n_uncertainty() kombiniert unabhaengige
+   n_resin-/n_air-Unsicherheiten per Fehlerfortpflanzung zu einer
+   delta_n-Unsicherheit (da convert_phase_to_height() nur von der
+   Differenz delta_n = n_resin - n_air abhaengt, kein 2D-Grid).
+   sweep_delta_n_sensitivity() wertet die RMSE der Segment-Daten ueber
+   einen delta_n-Bereich um den gefitteten Wert aus.
+   plot_delta_n_sensitivity() zeigt die RMSE-Kurve mit Unsicherheitsband.
+
+10. ICC / Reproduzierbarkeit ueber mehrere Drucke (Punkt 8)
+    Dateien:
+      - reliability.py -> mira/analysis/reliability.py
+      - plotter_stats_patch_3.py -> Ergaenzung fuer plotter_stats.py
+    Funktion: compute_icc() implementiert ICC(1,1), ICC(2,1) (Default),
+    ICC(3,1) nach Shrout & Fleiss (1979) / McGraw & Wong (1996), inkl.
+    Konfidenzintervall und F-Test. compute_icc_from_dataframe() nimmt
+    direkt ein Ensemble-DataFrame entgegen. interpret_icc() gibt die
+    ueblichen Koo & Li (2016)-Schwellenwerte (poor/moderate/good/
+    excellent) zurueck. plot_icc_summary() zeigt mehrere ICC-Werte
+    (z.B. je DOE) als Forest-Plot.
+    WICHTIG: Formeln wurden aus dem Training zitiert, nicht aus den
+    Papern nachgeschlagen - numerisch validiert (siehe Teil 2), aber vor
+    Verwendung im Paper gegen eine Referenzimplementierung pruefen
+    (z.B. Python pingouin.intraclass_corr oder R psych::ICC()).
+
+--------------------------------------------------------------------
+BUGFIX (bereichsuebergreifend)
+--------------------------------------------------------------------
+In der urspruenglichen Bland-Altman-Funktion und im ersten Entwurf von
+topology.py wurden maskierte Arrays (numpy.ma.MaskedArray) durch die
+Pruefung "hasattr(x, 'data')" faelschlich entmaskiert - MaskedArray hat
+selbst ein .data-Attribut, das aber die Rohwerte OHNE Maske liefert.
+Beide Stellen wurden korrigiert (Fix: erst pruefen, ob es sich bereits
+um ein ndarray/MaskedArray handelt, .data nur fuer echte Wrapper-Objekte
+wie ImageData verwenden) und mit einem echten maskierten Testfall
+verifiziert (2500 -> 2400 gueltige Punkte nach Ausmaskieren einer
+10x10-Ecke).
+
+--------------------------------------------------------------------
+TEIL 2: WAS BEREITS GETESTET WURDE (zur Einordnung)
+--------------------------------------------------------------------
+Alle oben genannten Funktionen wurden mit synthetischen Daten in
+isolierten Test-Paketen (nicht in eurer echten Codebase) verifiziert:
+- delta_n-Fit: bekanntes delta_n=0.012 -> gefittet 0.0119909, R^2=0.999994
+- Regression: bekannte Steigung 43.33 -> gefittet 43.3193, R^2=1.0000
+- Ensemble/CV: 5 normale + 1 verrauschter Ausreisser-Druck -> CV steigt
+  von 4-10% auf 13-64% mit dem Ausreisser
+- Snapshot-Roundtrip: info/statistics ueberleben save->load exakt
+  (bis auf JSON-bedingte Tupel->Liste-Umwandlung), Rueckwaertskompatibi-
+  litaet mit Dateien ohne die neuen Keys verifiziert
+- Topologie-Analyse: systematischer (gradientkorrelierter) Fehler ->
+  r=0.993, reines Rauschen -> r=0.008; Maskierung korrekt respektiert
+- Sensitivitaet: RMSE-Minimum im Sweep trifft exakt den wahren delta_n
+- ICC: perfekte Uebereinstimmung -> ICC=1.000000 (alle 3 Typen), reines
+  Rauschen -> ICC=-0.15 (nicht signifikant, p=0.94), ICC(1,1)-F-Test
+  stimmt exakt (1e-8) mit scipy.stats.f_oneway ueberein
+
+Was NICHT getestet wurde: das Zusammenspiel ALLER Patches gleichzeitig
+in eurer echten, vollstaendigen Codebase mit echten Messdaten. Die
+Tests liefen jeweils in schrittweise aufgebauten Stub-Paketen.
+
+--------------------------------------------------------------------
+TEIL 3: KONSOLIDIERTE TESTCHECKLISTE
+--------------------------------------------------------------------
+
+[ ] 1. VOLLSTAENDIGER INTEGRATIONSTEST MIT ECHTER CODEBASE
+      Alle Patches gemeinsam einbauen (nicht nur modulweise), dann einen
+      kompletten Durchlauf mit echten Daten fahren: Struktur laden ->
+      segmentieren -> calculate_delta_n() -> fit_segment_regression() ->
+      analyze_error_vs_topology() -> sweep_delta_n_sensitivity() ->
+      save_snapshot() -> load_snapshot() -> pruefen, dass alles wieder
+      da ist.
+
+[ ] 2. R^2-WERTE MIT ECHTEN MESSDATEN PLAUSIBILISIEREN
+      calculate_delta_n() und fit_segment_regression() mit echten
+      insitu/sensofar-Daten aufrufen. R^2 sollte deutlich > 0.9 sein -
+      sonst deutet das auf nicht passende Segmentierung oder zu kleinen
+      edge_offset_px hin.
+
+[ ] 3. INFO-DICT KONSEQUENT BEFUELLEN
+      structure.set_info(doe_id=..., print_id=...) muss auf JEDER
+      Structure gesetzt sein, bevor build_ensemble_dataframe() oder
+      compute_icc_from_dataframe() aufgerufen wird - sonst None-Werte
+      in den ID-Spalten bzw. Fehler wegen fehlender Segmente in der
+      Pivot-Tabelle.
+
+[ ] 4. SNAPSHOT-RUECKWAERTSKOMPATIBILITAET MIT ECHTEN ALTDATEIEN
+      Eine ECHTE, bereits existierende .npz-Datei laden (nicht nur neu
+      geschriebene) - pruefen, dass keine Exception kommt. Nach dem
+      Laden: statistics enthaelt reine Dicts, nicht mehr die
+      urspruenglichen Dataclass-Objekte - bei Bedarf explizit
+      rekonstruieren.
+
+[ ] 5. PANDAS ALS ABHAENGIGKEIT ERGAENZEN
+      Fuer ensemble.py und reliability.py (compute_icc_from_dataframe)
+      wird pandas benoetigt - in requirements/pyproject aufnehmen, falls
+      noch nicht vorhanden.
+
+[ ] 6. EINHEITEN BEI DER TOPOLOGIE-ANALYSE PRUEFEN
+      analyze_error_vs_topology() erwartet pixel_size in Metern (nicht
+      µm) - sonst stimmen Gradient-/Kruemmungs-Skalen nicht mit den
+      restlichen physikalischen Berechnungen ueberein.
+
+[ ] 7. ICC GEGEN REFERENZIMPLEMENTIERUNG PRUEFEN
+      Vor Verwendung im Paper: compute_icc() (insbesondere ICC(2,1) mit
+      seiner Satterthwaite-approximierten CI) einmal an denselben Daten
+      gegen pingouin.intraclass_corr() (Python) oder psych::ICC() (R)
+      gegenpruefen.
+
+[ ] 8. VOLLSTAENDIGE MESSTABELLE FUER ICC SICHERSTELLEN
+      compute_icc()/compute_icc_from_dataframe() verlangen eine
+      VOLLSTAENDIGE (subjects x raters)-Tabelle - jedes Segment muss in
+      jedem Druck gemessen worden sein. Bei fehlenden Kombinationen vorher
+      filtern/droppen, sonst kommt ein Fehler (bewusst kein stilles
+      Auffuellen mit NaN/Mittelwert).
+
+[ ] 9. SEGMENTIERUNGS-DUPLIKAT IM BLICK BEHALTEN
+      Falls irgendwo Structure.segment() direkt statt der
+      Processor-Methode (segment_structure()) aufgerufen wird, fehlt dort
+      das automatische info-Update (siehe offene_punkte-Datei, Punkt 2.1).
+
+[ ] 10. RICHTIGEN ICC-TYP FUER DIE PAPER-AUSSAGE WAEHLEN
+       ICC(2,1) (Default) fuer "Drucke dieses Designs sind allgemein
+       reproduzierbar" (generalisierbar), ICC(3,1) fuer eine engere
+       Aussage nur ueber genau diese N Drucke (dafuer exakte CI statt
+       Naeherung).

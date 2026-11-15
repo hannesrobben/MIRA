@@ -13,13 +13,13 @@ from typing import TYPE_CHECKING, Dict, List, Literal, Tuple, Optional, Union
 
 import cv2
 
-from .registration import RegistrationRefiner, NoRefinement
+
 from ..core.structure import Structure, Segment
 from ..utils.exceptions import AlignmentError, ValidationError
 
 if TYPE_CHECKING:
-    # Visible only to type checkers; no runtime import.
     from ..processor import StructureProcessor
+    from .registration import RegistrationRefiner
 
 
 def align_structures(
@@ -802,43 +802,6 @@ def center_structures(
         raise AlignmentError(f"Structure centering failed: {str(e)}")
 
 
-def _warp_structure_mask(
-    mask: np.ndarray,
-    M: np.ndarray,
-    output_dim: Tuple[int, int],
-) -> np.ndarray:
-    """
-    Apply an affine transformation to a binary structure mask.
-
-    The mask is treated as a float image, warped, and then thresholded
-    back to boolean. This ensures the structure mask stays consistent
-    with the transformed raw data without requiring a new detect_structure()
-    call.
-
-    Parameters
-    ----------
-    mask : np.ndarray
-        Boolean mask where True indicates structure pixels.
-    M : np.ndarray
-        2x3 affine transformation matrix (as used by cv2.warpAffine).
-    output_dim : tuple of (width, height)
-        Output canvas size in (width, height) order (cv2 convention).
-
-    Returns
-    -------
-    np.ndarray
-        Boolean mask of shape (height, width) after transformation.
-    """
-    warped = cv2.warpAffine(
-        mask.astype(np.float32),
-        M,
-        output_dim,
-        flags=cv2.INTER_NEAREST,  # no interpolation artefacts on binary data
-        borderValue=0,
-    )
-    return warped > 0.5
-
-
 def _structure_tilt_degrees(corner_points) -> float:
     """
     Average tilt of a (near-rectangular) structure, in degrees.
@@ -909,33 +872,6 @@ def _build_alignment_matrix(
     return np.linalg.multi_dot([T, S, R])
 
 
-def _warp_segments(
-    old_segments: List[Segment],
-    new_raw_data: np.ndarray,
-    M: np.ndarray,
-    output_dim: Tuple[int, int],
-) -> List[Segment]:
-    """
-    Re-warp a list of Segments with the same affine matrix used for the raw
-    data, so segment masks stay consistent with the structure after alignment.
-
-    Returns new Segment objects referencing ``new_raw_data``. Without this,
-    segments created before alignment would keep their old-frame masks and
-    shapes, causing shape mismatches / wrong positions downstream.
-    """
-    warped = []
-    for seg in old_segments:
-        seg_mask = _warp_structure_mask(~seg.data.mask, M[:2, :], output_dim)
-        warped.append(
-            Segment(
-                data=ma.masked_array(new_raw_data, mask=~seg_mask),
-                pixel_size=seg.pixel_size,
-                id=seg.id,
-            )
-        )
-    return warped
-
-
 def _apply_warp_to_processor(
     proc: "StructureProcessor",
     M: np.ndarray,
@@ -945,64 +881,15 @@ def _apply_warp_to_processor(
     Warp all raw channels and the structure (mask + segments) of ``proc`` with
     the affine matrix ``M`` onto a canvas of ``output_dim`` = (width, height).
 
-    Everything is mutated in-place and kept mutually consistent: the structure
-    (and each segment) is rebuilt from the freshly warped raw data so no array
-    is ever left pointing at the pre-warp data.
+    Thin adapter around ``StructureProcessor.apply_affine_transform`` - the
+    single, authoritative geometry gateway. It is kept so existing call sites in
+    this module can keep their (width, height) OpenCV-style ``output_dim``
+    convention, while all the actual warping (raw channels, structure mask,
+    segment masks) and the raw/structure consistency guarantee live in one
+    place. Everything is mutated in-place and kept mutually consistent.
     """
-    M2 = M[:2, :]
-
-    def _warp(img):
-        if img is None:
-            return None
-        return cv2.warpAffine(img.data, M2, output_dim, borderValue=0)
-
-    warped_phase = _warp(proc.phase_data)
-    warped_height = _warp(proc.height_data)
-    warped_intensity = _warp(proc.intensity_data)
-
-    if warped_phase is not None:
-        proc.update_data(phase_data=warped_phase)
-    if warped_height is not None:
-        proc.update_data(height_data=warped_height)
-    if warped_intensity is not None:
-        proc.update_data(intensity_data=warped_intensity)
-
-    # Structure mask through the same matrix (nearest-neighbour keeps it binary).
-    warped_mask = _warp_structure_mask(~proc.structure.data.mask, M2, output_dim)
-    new_raw = proc._active_data.data
-    old_segments = proc.structure.segments
-    new_segments = (
-        _warp_segments(old_segments, new_raw, M, output_dim) if old_segments else []
-    )
-
-    proc.structure = Structure(
-        data=ma.masked_array(new_raw, mask=~warped_mask),
-        pixel_size=proc.structure.pixel_size,
-    )
-    proc.structure.segments = new_segments
-
-
-def _refine_pair(
-    fixed: "StructureProcessor",
-    moving: "StructureProcessor",
-    output_dim: Tuple[int, int],
-    refiner: RegistrationRefiner,
-) -> np.ndarray:
-    """
-    Estimate and apply a residual content-based transform locking `moving` onto
-    `fixed` after the geometric pre-alignment. Both must already share
-    `output_dim`. Returns the applied 2x3 matrix (identity if nothing changed).
-    """
-    if isinstance(refiner, NoRefinement):
-        return np.eye(2, 3, dtype=np.float32)
-
-    M_res = refiner.estimate(moving._active_data.data, fixed._active_data.data)
-    if np.allclose(M_res, np.eye(2, 3, dtype=np.float32)):
-        return M_res
-
-    M_res3 = np.vstack([M_res, [0.0, 0.0, 1.0]])
-    _apply_warp_to_processor(moving, M_res3, output_dim)  # warps channels+mask+segments
-    return M_res
+    width, height = output_dim
+    proc.apply_affine_transform(M, output_shape=(height, width))
 
 
 def align_processor_pair(
@@ -1011,7 +898,7 @@ def align_processor_pair(
     scaling: Literal["upsampling", "downsampling"] = "downsampling",
     visualize_line_detection: bool = False,
     keep_source_fixed: bool = False,
-    refiner: Optional[RegistrationRefiner] = None,  # <-- NEW
+    refiner: Optional["RegistrationRefiner"] = None,
 ) -> Tuple["StructureProcessor", Dict]:
     """
     Align source with reference via cv2.warpAffine on raw data.
@@ -1044,6 +931,10 @@ def align_processor_pair(
         several targets against the same source in sequence so that earlier
         targets are not invalidated by a later one moving source again
         (see ``align_processors_many``).
+    refiner : RegistrationRefiner, optional
+        If given, a content-based refinement step is applied on top of the
+        geometric pre-alignment (coarse-to-fine), estimating a residual
+        affine correction from image intensities.
 
     Returns
     -------
@@ -1070,8 +961,8 @@ def align_processor_pair(
     # ---------------------------------------------------------------------
     if keep_source_fixed:
         zoom_reference = [
-            source.pixel_size[1] / reference.pixel_size[1],  # y (row)
-            source.pixel_size[0] / reference.pixel_size[0],  # x (col)
+            reference.pixel_size[1] / source.pixel_size[1],  # y (row)
+            reference.pixel_size[0] / source.pixel_size[0],  # x (col)
         ]
         angle_reference = _structure_tilt_degrees(reference.structure.corner_points)
 
@@ -1081,11 +972,16 @@ def align_processor_pair(
         M_reference = _build_alignment_matrix(
             zoom_reference, reference.structure.center, angle_reference, image_center
         )
+
         _apply_warp_to_processor(reference, M_reference, output_dim)
         reference.update_pixel_size(source.pixel_size)
         reference.structure.pixel_size = source.pixel_size
 
-        applied = _refine_pair(source, reference, output_dim, refiner or NoRefinement())
+        if refiner is not None:
+            residual = refiner.estimate(
+                reference._active_data.data, source._active_data.data
+            )
+            _apply_warp_to_processor(reference, residual, output_dim)
 
         transform_info = {
             "scaling": scaling,
@@ -1094,10 +990,6 @@ def align_processor_pair(
             "keep_source_fixed": True,
             "rotation_angle_reference": angle_reference,
             "zoom_factor_reference": zoom_reference,
-            "refinement": {
-                "refiner": type(refiner or NoRefinement()).__name__,
-                "matrix": applied.tolist(),
-            },
         }
         return source, transform_info
 
@@ -1153,7 +1045,11 @@ def align_processor_pair(
     scaled_proc.update_pixel_size(kept_proc.pixel_size)
     scaled_proc.structure.pixel_size = kept_proc.pixel_size
 
-    applied = _refine_pair(source, reference, output_dim, refiner or NoRefinement())
+    if refiner is not None:
+        residual = refiner.estimate(
+            scaled_proc._active_data.data, kept_proc._active_data.data
+        )
+        _apply_warp_to_processor(scaled_proc, residual, output_dim)
 
     transform_info = {
         "scaling": scaling,
@@ -1171,10 +1067,6 @@ def align_processor_pair(
         "zoom_factor_reference": (
             zoom_scaled if scaled_proc is reference else zoom_kept
         ),
-        "refinement": {
-            "refiner": type(refiner or NoRefinement()).__name__,
-            "matrix": applied.tolist(),
-        },
     }
     return source, transform_info
 

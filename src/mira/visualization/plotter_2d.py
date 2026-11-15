@@ -5,27 +5,28 @@ This module provides functions for creating 2D visualizations of image data,
 detected structures, structure segments, and comparative visualizations.
 """
 
-import numpy as np
+from dataclasses import dataclass
+
 import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib import patches
 from matplotlib.colors import ListedColormap
-import matplotlib.patches as patches
-from typing import Optional, Union, Tuple, List, Dict, Any, Callable
 
 from ..core.image import ImageData
-from ..core.structure import Structure, Segment, Background
+from ..core.structure import Structure
 from ..utils.exceptions import VisualizationError
 
 
 def old_plot_image(
-    image_data: Union[ImageData, np.ndarray],
+    image_data: ImageData | np.ndarray,
     title: str = "Image Data",
     cmap: str = "viridis",
-    ax: Optional[plt.Axes] = None,
+    ax: plt.Axes | None = None,
     colorbar: bool = True,
     scale_bar: bool = False,
-    pixel_size: Optional[Tuple[float, float]] = None,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
+    pixel_size: tuple[float, float] | None = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
     **kwargs,
 ) -> plt.Figure:
     """
@@ -119,25 +120,25 @@ def old_plot_image(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to plot image: {str(e)}")
+        raise VisualizationError(f"Failed to plot image: {e!s}")
 
 
 def plot_image(
-    image_data: Union[ImageData, np.ndarray],
+    image_data: ImageData | np.ndarray,
     title: str = "Image Data",
     cmap: str = "viridis",
-    ax: Optional[plt.Axes] = None,
+    ax: plt.Axes | None = None,
     colorbar: bool = True,
     scale_bar: bool = False,
-    pixel_size: Optional[Tuple[float, float]] = None,
+    pixel_size: tuple[float, float] | None = None,
     pixel_size_unit: str = "m",
     physical_axes: bool = False,
     clip_percentile: bool = False,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    xlabel: Optional[str] = None,
-    ylabel: Optional[str] = None,
-    colorbar_label: Optional[str] = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    colorbar_label: str | None = None,
     **kwargs,
 ) -> plt.Figure:
     """
@@ -206,26 +207,35 @@ def plot_image(
         else:
             fig = ax.figure
 
+        if "dpi" in kwargs:
+            dpi_value = kwargs.pop("dpi")
+            fig.set_dpi(dpi_value)
+        font_sz = 12
+        if "font_size" in kwargs:
+            font_sz = kwargs.pop("font_size")
+            plt.tick_params(axis="both", which="major", labelsize=font_sz)
+
         # --- Plot ---
         im = ax.imshow(data, cmap=cmap, vmin=vmin, vmax=vmax, extent=extent, **kwargs)
         ax.set_title(title)
 
         # --- Axis labels ---
         if xlabel is not None:
-            ax.set_xlabel(xlabel)
+            ax.set_xlabel(xlabel, fontsize=font_sz)
         elif physical_axes and pixel_size is not None:
-            ax.set_xlabel(f"x [{pixel_size_unit}]")
+            ax.set_xlabel(f"x [{pixel_size_unit}]", fontsize=font_sz)
 
         if ylabel is not None:
-            ax.set_ylabel(ylabel)
+            ax.set_ylabel(ylabel, fontsize=font_sz)
         elif physical_axes and pixel_size is not None:
-            ax.set_ylabel(f"y [{pixel_size_unit}]")
+            ax.set_ylabel(f"y [{pixel_size_unit}]", fontsize=font_sz)
 
         # --- Colorbar ---
         if colorbar:
             cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
             if colorbar_label is not None:
-                cbar.set_label(colorbar_label)
+                cbar.set_label(colorbar_label, fontsize=font_sz)
+                cbar.ax.tick_params(labelsize=font_sz)
 
         # --- Scale bar ---
         if scale_bar and pixel_size is not None:
@@ -275,7 +285,7 @@ def plot_image(
                 transform=ax.transAxes,
                 ha="center",
                 va="bottom",
-                fontsize=8,
+                fontsize=font_sz,
                 zorder=6,
             )
 
@@ -283,14 +293,320 @@ def plot_image(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to plot image: {str(e)}")
+        raise VisualizationError(f"Failed to plot image: {e!s}")
+
+
+@dataclass
+class HeatmapProfileResult:
+    """
+    Container for the outputs of `plot_image_with_profile`.
+
+    Bundling the two independent figures/axes plus the extracted profile
+    in one object (instead of a plain tuple) keeps the call site readable
+    and leaves room to add fields later - e.g. a fitted peak position -
+    without breaking existing code that only accesses the attributes it
+    needs. This mirrors how `Structure`/`Segment`/`ImageData` are already
+    modeled as dataclasses elsewhere in this library.
+
+    Attributes:
+        heatmap_fig:      Figure containing the 2D heatmap.
+        heatmap_ax:       Axes of the heatmap.
+        profile_fig:      Figure containing the 1D profile plot.
+        profile_ax:       Axes of the profile plot.
+        profile_data:     The extracted 1D profile values.
+        profile_index:    Row/column index the profile was extracted at
+                          (resolved from "mid" if that was passed in).
+        profile_axis:     "x" or "y", as passed to the function.
+    """
+
+    heatmap_fig: plt.Figure
+    heatmap_ax: plt.Axes
+    profile_fig: plt.Figure
+    profile_ax: plt.Axes
+    profile_data: np.ndarray
+    profile_index: int
+    profile_axis: str
+
+
+def _style_axes(ax: plt.Axes, fontsize: int) -> None:
+    """
+    Re-apply a consistent font-size hierarchy to an axes' *already-set*
+    title, axis labels, and tick labels: title at `fontsize`, axis labels
+    two points smaller, tick labels four points smaller.
+
+    Call this last, after titles/labels have already been set by the
+    plotting calls above - it only touches font size, not the text
+    itself. Centralising the sizing rule here (instead of repeating it at
+    every `set_title`/`set_xlabel`/`set_ylabel` call) means every plot in
+    this module can be kept visually consistent by tuning one function,
+    and any future plotting function can reuse it too.
+
+    Args:
+        ax:       Axes to restyle.
+        fontsize: Base font size (used for the title).
+    """
+    ax.set_title(ax.get_title(), fontsize=fontsize)
+    ax.set_xlabel(ax.get_xlabel(), fontsize=max(fontsize - 2, 1))
+    ax.set_ylabel(ax.get_ylabel(), fontsize=max(fontsize - 2, 1))
+    ax.tick_params(axis="both", labelsize=max(fontsize - 4, 1))
+
+
+def plot_image_with_profile(
+    image_data: ImageData | np.ndarray,
+    profile_axis: str = "x",
+    profile_location: str | int = "mid",
+    pixel_size: tuple[float, float] | None = None,
+    pixel_size_unit: str = "m",
+    cmap: str = "viridis",
+    physical_axes: bool = True,
+    clip_percentile: bool | tuple[float, float] = True,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    heatmap_title: str = "",
+    profile_title: str = "",
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    colorbar: bool = True,
+    colorbar_label: str | None = None,
+    profile_xlabel: str | None = None,
+    profile_ylabel: str | None = None,
+    profile_color: str = "tab:blue",
+    show_profile_line: bool = True,
+    line_color: str = "red",
+    line_style: str = "-",
+    line_width: float = 2.0,
+    line_alpha: float = 0.8,
+    fontsize: int = 18,
+    heatmap_figsize: tuple[float, float] = (8, 6),
+    profile_figsize: tuple[float, float] = (10, 6),
+    dpi: int = 300,
+    save_path_heatmap: str | None = None,
+    save_path_profile: str | None = None,
+    show_plot: bool = False,
+) -> HeatmapProfileResult:
+    """
+    Plot a 2D heatmap and an independent 1D profile plot for the same data.
+
+    The profile is extracted along a single row ("x") or column ("y") at
+    `profile_location`, using the same extraction logic as
+    `plot_structure_comparison` (`_extract_profile`). The exact row/column
+    used is marked on the heatmap with a reference line, so the two plots
+    stay visually linked even though they are separate figures that can
+    be saved and used independently.
+
+    Args:
+        image_data:          Image data to plot. Either an `ImageData`
+                             instance (pixel_size is taken from it unless
+                             overridden) or a raw 2D array.
+        profile_axis:        "x" extracts a horizontal profile (fixed
+                             row, varies along columns); "y" extracts a
+                             vertical profile (fixed column, varies along
+                             rows). Same convention as `get_profile` on
+                             `ImageData` and as `plot_structure_comparison`.
+        profile_location:    Row/column index to extract the profile at,
+                             or "mid" for the array center.
+        pixel_size:          (dy, dx) pixel size in physical units.
+                             Falls back to `image_data.pixel_size` if an
+                             `ImageData` was passed, else (1.0, 1.0).
+        pixel_size_unit:     Physical unit string, e.g. "m", "µm", "nm".
+        cmap:                 Colormap for the heatmap.
+        physical_axes:       If True, heatmap axes and the profile x-axis
+                             use physical units; if False, pixel indices.
+        clip_percentile:     If True, clip the heatmap colormap range to
+                             the 1st-99th percentile of the data. Pass a
+                             custom (low, high) percentile tuple to
+                             override the interval, or False to disable
+                             (full data range unless vmin/vmax are given).
+        vmin:                 Explicit colormap minimum. Overrides
+                             `clip_percentile` if given.
+        vmax:                 Explicit colormap maximum. Overrides
+                             `clip_percentile` if given.
+        heatmap_title:       Title of the heatmap.
+        profile_title:       Title of the profile plot. Defaults to
+                             "Profile at row/column <index>".
+        xlabel:               Heatmap x-axis label override.
+        ylabel:               Heatmap y-axis label override.
+        colorbar:             Whether to add a colorbar to the heatmap.
+        colorbar_label:      Colorbar label. Also used as the default
+                             profile y-axis label (same physical
+                             quantity), unless `profile_ylabel` is given.
+        profile_xlabel:      Profile x-axis label override.
+        profile_ylabel:      Profile y-axis label override. Defaults to
+                             `colorbar_label`.
+        profile_color:        Line color of the profile curve.
+        show_profile_line:   If True, draw a reference line on the
+                             heatmap at the row/column the profile was
+                             taken from.
+        line_color:           Color of the reference line on the heatmap.
+        line_style:           Linestyle of the reference line.
+        line_width:           Width of the reference line.
+        line_alpha:           Opacity of the reference line.
+        fontsize:             Base font size for both plots. Axis labels
+                             are 2pt smaller, tick labels 4pt smaller -
+                             see `_style_axes`.
+        heatmap_figsize:      Figure size of the heatmap.
+        profile_figsize:      Figure size of the profile plot.
+        dpi:                   Resolution used when saving either plot.
+        save_path_heatmap:    Optional path to save the heatmap to.
+        save_path_profile:    Optional path to save the profile plot to.
+        show_plot:             If True, call `plt.show()` before returning.
+
+    Returns:
+        `HeatmapProfileResult` with both figures/axes and the extracted
+        profile data.
+
+    Raises:
+        VisualizationError: If plotting or profile extraction fails.
+    """
+    try:
+        # --- Data extraction ---
+        data = image_data.data if isinstance(image_data, ImageData) else image_data
+
+        if pixel_size is None and isinstance(image_data, ImageData):
+            pixel_size = image_data.pixel_size
+        if pixel_size is None:
+            pixel_size = (1.0, 1.0)
+        dy, dx = pixel_size
+
+        # --- Resolve percentile clipping (same convention as
+        # plot_structure_comparison, kept consistent on purpose) ---
+        if isinstance(clip_percentile, tuple):
+            percentile_low, percentile_high = clip_percentile
+            use_percentile_clip = True
+        else:
+            percentile_low, percentile_high = 1, 99
+            use_percentile_clip = bool(clip_percentile)
+
+        eff_vmin, eff_vmax = vmin, vmax
+        if use_percentile_clip:
+            if eff_vmin is None:
+                eff_vmin = float(np.nanpercentile(data, percentile_low))
+            if eff_vmax is None:
+                eff_vmax = float(np.nanpercentile(data, percentile_high))
+
+        # --- Extract the profile once; reuse its index for the
+        # reference line, so heatmap and profile can never disagree
+        # about which row/column was actually used. ---
+        profile_data, idx = _extract_profile(data, profile_axis, profile_location)
+
+        # --- Heatmap (independent figure) ---
+        fig_heatmap, ax_heatmap = plt.subplots(figsize=heatmap_figsize)
+        plot_image(
+            data,
+            ax=ax_heatmap,
+            cmap=cmap,
+            pixel_size=pixel_size,
+            pixel_size_unit=pixel_size_unit,
+            physical_axes=physical_axes,
+            vmin=eff_vmin,
+            vmax=eff_vmax,
+            title=heatmap_title,
+            xlabel=xlabel,
+            ylabel=ylabel,
+            colorbar=colorbar,
+            colorbar_label=colorbar_label,
+        )
+
+        if show_profile_line:
+            if profile_axis == "x":
+                line_pos = idx * dy if physical_axes else idx
+                ax_heatmap.axhline(
+                    line_pos,
+                    color=line_color,
+                    linestyle=line_style,
+                    linewidth=line_width,
+                    alpha=line_alpha,
+                )
+            else:
+                line_pos = idx * dx if physical_axes else idx
+                ax_heatmap.axvline(
+                    line_pos,
+                    color=line_color,
+                    linestyle=line_style,
+                    linewidth=line_width,
+                    alpha=line_alpha,
+                )
+
+        # Restyle fonts last, after plot_image/axhline have set their
+        # own title/labels, so `fontsize` always wins.
+        _style_axes(ax_heatmap, fontsize)
+        if colorbar and ax_heatmap.images:
+            im = ax_heatmap.images[0]
+            if im.colorbar is not None:
+                im.colorbar.ax.tick_params(labelsize=max(fontsize - 4, 1))
+                im.colorbar.ax.yaxis.label.set_fontsize(max(fontsize - 2, 1))
+
+        plt.tight_layout()
+        if save_path_heatmap:
+            fig_heatmap.savefig(
+                save_path_heatmap, dpi=dpi, bbox_inches="tight", facecolor="white"
+            )
+
+        # --- Profile plot (independent figure) ---
+        fig_profile, ax_profile = plt.subplots(figsize=profile_figsize)
+
+        step = dx if profile_axis == "x" else dy
+        x_coords = (
+            np.arange(len(profile_data)) * step
+            if physical_axes
+            else np.arange(len(profile_data))
+        )
+        ax_profile.plot(
+            x_coords, profile_data, color=profile_color, linewidth=2.5, alpha=0.9
+        )
+        ax_profile.grid(True, alpha=0.3, linestyle=":")
+
+        ax_profile.set_title(profile_title)
+        # location_kind = "row" if profile_axis == "x" else "column"
+        # ax_profile.set_title(profile_title or f"Profile at {location_kind} {idx}")
+
+        if profile_xlabel is not None:
+            ax_profile.set_xlabel(profile_xlabel)
+        elif physical_axes:
+            axis_letter = "x" if profile_axis == "x" else "y"
+            ax_profile.set_xlabel(f"{axis_letter} [{pixel_size_unit}]")
+        else:
+            ax_profile.set_xlabel(
+                "column index" if profile_axis == "x" else "row index"
+            )
+
+        if profile_ylabel is not None:
+            ax_profile.set_ylabel(profile_ylabel)
+        elif colorbar_label is not None:
+            ax_profile.set_ylabel(colorbar_label)
+
+        _style_axes(ax_profile, fontsize)
+
+        plt.tight_layout()
+        if save_path_profile:
+            fig_profile.savefig(
+                save_path_profile, dpi=dpi, bbox_inches="tight", facecolor="white"
+            )
+
+        if show_plot:
+            plt.show()
+
+        return HeatmapProfileResult(
+            heatmap_fig=fig_heatmap,
+            heatmap_ax=ax_heatmap,
+            profile_fig=fig_profile,
+            profile_ax=ax_profile,
+            profile_data=profile_data,
+            profile_index=idx,
+            profile_axis=profile_axis,
+        )
+
+    except Exception as e:
+        if isinstance(e, VisualizationError):
+            raise
+        raise VisualizationError(f"Failed to plot image with profile: {e!s}")
 
 
 def plot_structure(
     structure: Structure,
     title: str = "Detected Structure",
     cmap: str = "viridis",
-    ax: Optional[plt.Axes] = None,
+    ax: plt.Axes | None = None,
     highlight_bounds: bool = True,
     highlight_corners: bool = True,
     mark_center: bool = True,
@@ -379,14 +695,14 @@ def plot_structure(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to plot structure: {str(e)}")
+        raise VisualizationError(f"Failed to plot structure: {e!s}")
 
 
 def plot_segments(
     structure: Structure,
     title: str = "Structure Segments",
     cmap: str = "tab20",
-    ax: Optional[plt.Axes] = None,
+    ax: plt.Axes | None = None,
     label_segments: bool = True,
     colorbar: bool = True,
     **kwargs,
@@ -475,21 +791,21 @@ def plot_segments(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to plot segments: {str(e)}")
+        raise VisualizationError(f"Failed to plot segments: {e!s}")
 
 
 def plot_comparison(
-    image1: Union[ImageData, np.ndarray],
-    image2: Union[ImageData, np.ndarray],
+    image1: ImageData | np.ndarray,
+    image2: ImageData | np.ndarray,
     title1: str = "Image 1",
     title2: str = "Image 2",
     diff_title: str = "Difference",
     cmap: str = "viridis",
     diff_cmap: str = "coolwarm",
     show_difference: bool = True,
-    vmin: Optional[float] = None,
-    vmax: Optional[float] = None,
-    fig: Optional[plt.Figure] = None,
+    vmin: float | None = None,
+    vmax: float | None = None,
+    fig: plt.Figure | None = None,
     **kwargs,
 ) -> plt.Figure:
     """
@@ -578,19 +894,19 @@ def plot_comparison(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to plot comparison: {str(e)}")
+        raise VisualizationError(f"Failed to plot comparison: {e!s}")
 
 
 def plot_profiles(
-    image_data: Union[ImageData, np.ndarray],
-    x_position: Optional[int] = None,
-    y_position: Optional[int] = None,
+    image_data: ImageData | np.ndarray,
+    x_position: int | None = None,
+    y_position: int | None = None,
     title: str = "Image Profiles",
     x_profile_label: str = "Horizontal Profile",
     y_profile_label: str = "Vertical Profile",
-    fig: Optional[plt.Figure] = None,
-    ax1: Optional[plt.Axes] = None,
-    ax2: Optional[plt.Axes] = None,
+    fig: plt.Figure | None = None,
+    ax1: plt.Axes | None = None,
+    ax2: plt.Axes | None = None,
     **kwargs,
 ) -> plt.Figure:
     """
@@ -674,15 +990,108 @@ def plot_profiles(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to plot profiles: {str(e)}")
+        raise VisualizationError(f"Failed to plot profiles: {e!s}")
+
+
+def plot_profiles_physical(
+    *profiles: np.ndarray,
+    labels: list[str] | None = None,
+    colors: list[str] | None = None,
+    pixel_pitch: float = 0.0869,
+    pitch_unit: str = "µm",
+    title: str = "Profile Comparison",
+    ylabel: str = "Height [µm]",
+    font_size: int = 14,
+    fig: plt.Figure | None = None,
+    ax: plt.Axes | None = None,
+    **kwargs,
+) -> plt.Figure:
+    """
+    Plot one or more already-extracted 1D profiles against a shared
+    physical x-axis, using a single pixel pitch to convert sample
+    index to physical distance.
+
+    This is a lightweight counterpart to `plot_dual_profile` for the
+    common case of N profiles on one shared y-axis (no per-profile
+    y-scale alignment). For profiles that live on genuinely different
+    scales, use `plot_dual_profile` or `plot_structure_comparison`
+    instead.
+
+    Args:
+        *profiles: One or more 1D arrays of equal or differing length.
+        labels: Legend label per profile, in the same order. Defaults
+            to "Profile 1", "Profile 2", ... if omitted.
+        pixel_pitch: Physical size of one pixel/sample along the
+            profile, in `pitch_unit` (e.g. 8e-2 for 0.08 µm/px).
+            NOTE: pass the value already in the target unit - do not
+            pass a metre-scale pitch (e.g. 8e-8) here.
+        pitch_unit: Unit string used for the x-axis label.
+        title: Plot title.
+        ylabel: Y-axis label.
+        font_size: Base font size for the whole figure. Title uses
+            `font_size`, axis labels `font_size - 2`, tick labels and
+            legend `font_size - 4` - the same hierarchy `_style_axes`
+            applies elsewhere in this module, so figures stay visually
+            consistent across the library.
+        fig: Optional existing figure to plot on.
+        ax: Optional existing axes to plot on.
+        **kwargs: Additional arguments passed to each `ax.plot` call.
+
+    Returns:
+        Figure object.
+
+    Raises:
+        VisualizationError: If no profiles are given or plotting fails.
+    """
+    try:
+        if not profiles:
+            raise VisualizationError("At least one profile must be provided")
+
+        if fig is None or ax is None:
+            # fig, ax = plt.subplots(dpi=300)
+            fig, ax = plt.subplots(figsize=(9, 6))
+
+        if labels is None:
+            labels = [f"Profile {i + 1}" for i in range(len(profiles))]
+        elif len(labels) != len(profiles):
+            raise VisualizationError(
+                f"Got {len(profiles)} profiles but {len(labels)} labels"
+            )
+
+        if colors is not None and len(colors) != len(profiles):
+            raise VisualizationError(
+                f"Got {len(profiles)} profiles but {len(colors)} colors"
+            )
+
+        for i, (profile, label) in enumerate(zip(profiles, labels)):
+            profile = np.asarray(profile)
+            x = np.arange(len(profile)) * pixel_pitch
+            color = colors[i] if colors is not None else None
+            ax.plot(x, profile, label=label, color=color, **kwargs)
+
+        ax.set_xlabel(f"Position [{pitch_unit}]")
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.grid(True, alpha=0.3)
+        ax.legend(fontsize=max(font_size - 4, 1))
+
+        _style_axes(ax, font_size)
+
+        plt.tight_layout()
+        return fig
+
+    except Exception as e:
+        if isinstance(e, VisualizationError):
+            raise
+        raise VisualizationError(f"Failed to plot profiles: {e!s}")
 
 
 def visualize_edges(
-    image_data: Union[ImageData, np.ndarray],
-    threshold: Optional[float] = None,
+    image_data: ImageData | np.ndarray,
+    threshold: float | None = None,
     title: str = "Edge Detection",
     cmap: str = "gray",
-    ax: Optional[plt.Axes] = None,
+    ax: plt.Axes | None = None,
     **kwargs,
 ) -> plt.Figure:
     """
@@ -747,16 +1156,16 @@ def visualize_edges(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to visualize edges: {str(e)}")
+        raise VisualizationError(f"Failed to visualize edges: {e!s}")
 
 
 def visualize_corners(
-    image_data: Union[ImageData, np.ndarray],
+    image_data: ImageData | np.ndarray,
     threshold: float = 0.01,
     min_distance: int = 5,
     title: str = "Corner Detection",
     cmap: str = "gray",
-    ax: Optional[plt.Axes] = None,
+    ax: plt.Axes | None = None,
     **kwargs,
 ) -> plt.Figure:
     """
@@ -815,14 +1224,14 @@ def visualize_corners(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to visualize corners: {str(e)}")
+        raise VisualizationError(f"Failed to visualize corners: {e!s}")
 
 
 def _extract_profile(
     data: np.ndarray,
     axis: str,
-    location: Union[str, int],
-) -> Tuple[np.ndarray, int]:
+    location: str | int,
+) -> tuple[np.ndarray, int]:
     """
     Extract a 1D profile line from a 2D array.
 
@@ -868,7 +1277,7 @@ def _ensure_range_contains_data(
     d_min: float,
     d_max: float,
     padding: float,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Expand a y-axis range just enough to fully contain a data interval,
     plus a small breathing-room margin, without needlessly shrinking or
@@ -913,8 +1322,8 @@ def _ensure_range_contains_data(
 
 
 def _align_zero_multi(
-    axes: List[plt.Axes],
-    profile_data_list: List[np.ndarray],
+    axes: list[plt.Axes],
+    profile_data_list: list[np.ndarray],
     padding: float = 0.08,
 ) -> None:
     """
@@ -966,7 +1375,7 @@ def _align_zero_multi(
         ax.set_ylim(new_min, new_max)
 
 
-def _compute_robust_levels(data: np.ndarray) -> Tuple[float, float]:
+def _compute_robust_levels(data: np.ndarray) -> tuple[float, float]:
     """
     Estimate robust background/foreground reference levels of a structure.
 
@@ -1002,12 +1411,12 @@ def _compute_robust_levels(data: np.ndarray) -> Tuple[float, float]:
 
 
 def _align_levels_multi(
-    axes: List[plt.Axes],
-    data_list: List[np.ndarray],
-    profile_data_list: List[np.ndarray],
+    axes: list[plt.Axes],
+    data_list: list[np.ndarray],
+    profile_data_list: list[np.ndarray],
     level_margin: float = 0.1,
     padding: float = 0.08,
-) -> List[Tuple[float, float]]:
+) -> list[tuple[float, float]]:
     """
     Align profile y-axes using robust background/foreground levels.
 
@@ -1077,24 +1486,489 @@ def _align_levels_multi(
     return levels
 
 
+def _resolve_style_mapping(
+    value: dict[str, str] | list[str] | None,
+    labels: list[str],
+    default_cycle: list[str],
+) -> dict[str, str]:
+    """
+    Resolve a per-curve styling argument (color, linestyle, ...) into a
+    label -> value mapping, accepting three equally convenient input
+    shapes so callers never have to build the mapping by hand.
+
+    Args:
+        value:         Either a dict keyed by label (labels missing from
+                       the dict fall back to `default_cycle`), a list
+                       applied to `labels` in order (cycled if shorter
+                       than `labels`), or None to use `default_cycle`
+                       for every label.
+        labels:        Ordered list of curve labels to resolve a value
+                       for.
+        default_cycle: Fallback sequence, cycled as needed. Must be
+                       non-empty.
+
+    Returns:
+        Dictionary mapping every entry in `labels` to a resolved value.
+    """
+    if isinstance(value, dict):
+        return {
+            label: value.get(label, default_cycle[i % len(default_cycle)])
+            for i, label in enumerate(labels)
+        }
+    if isinstance(value, list) and value:
+        return {label: value[i % len(value)] for i, label in enumerate(labels)}
+    return {
+        label: default_cycle[i % len(default_cycle)] for i, label in enumerate(labels)
+    }
+
+
+def flatten_profile_dict(
+    nested_profiles: dict[str, dict[str, np.ndarray]],
+    separator: str = " - ",
+) -> dict[str, np.ndarray]:
+    """
+    Flatten a two-level {group: {sub_label: profile}} dictionary into a
+    single {combined_label: profile} dictionary, ready for
+    `plot_profile_collection`.
+
+    This is the shape naturally produced when collecting profiles across
+    several structures/processors in a loop, each contributing several
+    profiles of its own - e.g. one outer entry per processor, with one
+    inner entry per pixel location the profile was cut at.
+
+    Args:
+        nested_profiles: Two-level dictionary, e.g.
+                          `{"sensofar": {"Height profile 650": arr, ...},
+                          "developed": {...}}`.
+        separator:        String used to join the outer and inner key
+                          into the flat label, e.g.
+                          "sensofar - Height profile 650".
+
+    Returns:
+        Flat dictionary suitable for `plot_profile_collection`.
+
+    Raises:
+        VisualizationError: If `nested_profiles` is empty, or if any of
+            its values is not itself a dictionary (pass a flat dict
+            directly to `plot_profile_collection` in that case).
+    """
+    if not nested_profiles:
+        raise VisualizationError("Cannot flatten an empty profile dictionary.")
+
+    flat: dict[str, np.ndarray] = {}
+    for group_label, sub_profiles in nested_profiles.items():
+        if not isinstance(sub_profiles, dict):
+            raise VisualizationError(
+                f"Expected a nested dict of profiles for '{group_label}', "
+                f"got {type(sub_profiles).__name__}. Pass a flat dict "
+                "directly to plot_profile_collection instead."
+            )
+        for sub_label, profile in sub_profiles.items():
+            flat[f"{group_label}{separator}{sub_label}"] = profile
+
+    return flat
+
+
+def plot_profile_collection(
+    profiles: dict[str, np.ndarray],
+    pixel_size: tuple[float, float] | dict[str, tuple[float, float]] | None = None,
+    pixel_size_unit: str = "µm",
+    profile_axis: str = "x",
+    colors: dict[str, str] | list[str] | None = None,
+    linestyles: dict[str, str] | list[str] | None = None,
+    linewidth: float = 2.0,
+    alpha: float = 0.9,
+    title: str = "Profile Comparison",
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+    legend_loc: str = "best",
+    fontsize: int = 14,
+    figsize: tuple[float, float] = (10, 6),
+    grid: bool = True,
+    ax: plt.Axes | None = None,
+    dpi: int = 300,
+    save_path: str | None = None,
+    show_plot: bool = False,
+) -> plt.Figure:
+    """
+    Overlay an arbitrary number of 1D profiles on a single shared y-axis.
+
+    Use this when every profile represents the same physical quantity in
+    the same unit (e.g. several height profiles in µm) - a single shared
+    axis makes their absolute values directly comparable at a glance.
+    For two profiles of *different* quantities or scales that still need
+    to be compared shape-for-shape (e.g. two phase profiles with
+    different calibration factors), use `plot_dual_profile` instead,
+    which plots on two independently-scaled, zero- or level-aligned
+    axes.
+
+    Args:
+        profiles:          Flat dictionary of {label: 1D array}. Build
+                           this with `flatten_profile_dict` if you are
+                           starting from a nested {group: {sub_label:
+                           profile}} structure.
+        pixel_size:        (dy, dx) pixel size in physical units,
+                           applied to every profile, OR a dict giving a
+                           per-profile (dy, dx) (useful when profiles
+                           come from structures with slightly different
+                           pixel sizes). None plots against sample index
+                           instead of a physical x-axis.
+        pixel_size_unit:   Physical unit string, e.g. "µm". Only used
+                           when `pixel_size` is given.
+        profile_axis:      "x" (step size = dx) or "y" (step size =
+                           dy). Must match how the profiles were
+                           originally extracted.
+        colors:            Per-curve line color: a dict keyed by label,
+                           a list applied in `profiles` order (cycled if
+                           shorter), or None for the default color
+                           cycle.
+        linestyles:        Per-curve linestyle, same three accepted
+                           shapes as `colors`. Defaults to solid lines.
+        linewidth:         Line width, shared by all curves.
+        alpha:             Line opacity, shared by all curves.
+        title:             Plot title.
+        xlabel:            X-axis label override. Auto-derived from
+                           `profile_axis`/`pixel_size_unit` if omitted.
+        ylabel:            Y-axis label. Left blank if omitted - set
+                           this explicitly, since profiles of different
+                           physical quantities should not usually share
+                           one axis in the first place.
+        legend_loc:        Legend location, forwarded to `ax.legend`.
+        fontsize:          Base font size - see `_style_axes`.
+        figsize:           Figure size, ignored if `ax` is given.
+        grid:              Whether to draw a light dotted grid.
+        ax:                Optional existing axes to plot on, e.g. to
+                           embed this as one panel of a larger figure.
+        dpi:                Resolution used when saving.
+        save_path:         Optional path to save the figure to.
+        show_plot:          If True, call `plt.show()` before returning.
+
+    Returns:
+        Figure object (the parent of `ax`, if `ax` was given).
+
+    Raises:
+        VisualizationError: If `profiles` is empty or plotting fails.
+    """
+    try:
+        if not profiles:
+            raise VisualizationError("Cannot plot an empty profile collection.")
+
+        labels = list(profiles.keys())
+        default_colors = [f"C{i}" for i in range(10)]
+        resolved_colors = _resolve_style_mapping(colors, labels, default_colors)
+        resolved_styles = _resolve_style_mapping(linestyles, labels, ["-"])
+
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+        else:
+            fig = ax.figure
+
+        for label, profile_data in profiles.items():
+            profile_data = np.asarray(profile_data)
+
+            curve_pixel_size = (
+                pixel_size.get(label) if isinstance(pixel_size, dict) else pixel_size
+            )
+
+            if curve_pixel_size is not None:
+                dy, dx = curve_pixel_size
+                step = dx if profile_axis == "x" else dy
+                x_coords = np.arange(len(profile_data)) * step
+            else:
+                x_coords = np.arange(len(profile_data))
+
+            ax.plot(
+                x_coords,
+                profile_data,
+                color=resolved_colors[label],
+                linestyle=resolved_styles[label],
+                linewidth=linewidth,
+                alpha=alpha,
+                label=label,
+            )
+
+        if grid:
+            ax.grid(True, alpha=0.3, linestyle=":")
+
+        if xlabel is not None:
+            ax.set_xlabel(xlabel)
+        elif pixel_size is not None:
+            axis_letter = "x" if profile_axis == "x" else "y"
+            ax.set_xlabel(f"{axis_letter} [{pixel_size_unit}]")
+        else:
+            ax.set_xlabel("sample index")
+
+        if ylabel is not None:
+            ax.set_ylabel(ylabel)
+
+        ax.set_title(title)
+        ax.legend(loc=legend_loc)
+        _style_axes(ax, fontsize)
+
+        plt.tight_layout()
+        if save_path:
+            fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        if show_plot:
+            plt.show()
+
+        return fig
+
+    except Exception as e:
+        if isinstance(e, VisualizationError):
+            raise
+        raise VisualizationError(f"Failed to plot profile collection: {e!s}")
+
+
+@dataclass
+class DualProfileResult:
+    """
+    Container for the outputs of `plot_dual_profile`.
+
+    Bundles the figure and both axes (instead of a plain tuple) so the
+    call site stays readable and there is room to add fields later
+    without breaking existing code - the same reasoning behind
+    `HeatmapProfileResult` above.
+
+    Attributes:
+        fig:    The figure containing both axes.
+        ax_1:   Axes carrying `profile_1` (left y-axis).
+        ax_2:   Axes carrying `profile_2` (right y-axis, `ax_1.twinx()`).
+        levels: Per-profile (background, foreground) levels used for
+                alignment. Only set when `align_mode="levels"`.
+    """
+
+    fig: plt.Figure
+    ax_1: plt.Axes
+    ax_2: plt.Axes
+    levels: tuple[tuple[float, float], tuple[float, float]] | None = None
+
+
+def plot_dual_profile(
+    profile_1: np.ndarray,
+    profile_2: np.ndarray,
+    label_1: str = "Profile 1",
+    label_2: str = "Profile 2",
+    color_1: str = "tab:blue",
+    color_2: str = "tab:red",
+    pixel_size: tuple[float, float] | None = None,
+    pixel_size_unit: str = "µm",
+    profile_axis: str = "x",
+    align_mode: str = "zero",
+    data_1: np.ndarray | None = None,
+    data_2: np.ndarray | None = None,
+    level_margin: float = 0.1,
+    padding: float = 0.08,
+    show_level_lines: bool = False,
+    title: str = "Profile Comparison",
+    xlabel: str | None = None,
+    ylabel_1: str | None = None,
+    ylabel_2: str | None = None,
+    linewidth: float = 2.5,
+    alpha: float = 0.9,
+    fontsize: int = 14,
+    figsize: tuple[float, float] = (10, 6),
+    grid: bool = True,
+    dpi: int = 300,
+    save_path: str | None = None,
+    show_plot: bool = False,
+) -> DualProfileResult:
+    """
+    Plot two 1D profiles of potentially different scale on one shared
+    x-axis, each on its own y-axis, visually aligned so their shapes
+    become directly comparable.
+
+    This is the two-curve counterpart to `plot_structure_comparison`'s
+    multi-axis profile row, built on the very same alignment machinery
+    (`_align_zero_multi` / `_align_levels_multi`) so both stay in sync
+    as that machinery evolves, instead of duplicating the alignment
+    logic here.
+
+    Args:
+        profile_1, profile_2: The two 1D profile arrays to compare.
+        label_1, label_2:      Legend labels for each curve.
+        color_1, color_2:      Line (and matching axis/tick) color for
+                               each curve.
+        pixel_size:            (dy, dx) pixel size in physical units,
+                               shared by both profiles. None plots
+                               against sample index.
+        pixel_size_unit:       Physical unit string, e.g. "µm".
+        profile_axis:          "x" or "y" - selects dx or dy as the
+                               step size from `pixel_size`.
+        align_mode:            How the two y-axes are aligned:
+                               - "zero":   Zero sits at the same height
+                                 on both axes (`_align_zero_multi`).
+                                 Good default when both profiles
+                                 oscillate around a meaningful zero.
+                               - "levels": Robust background/foreground
+                                 levels (per-profile Otsu class median,
+                                 `_align_levels_multi`) sit at the same
+                                 height on both axes. Better when the
+                                 two quantities use different
+                                 calibration factors and zero is not
+                                 the meaningful reference point.
+                                 Requires `data_1` and `data_2`.
+                               - "none":   Both axes autoscale
+                                 independently.
+        data_1, data_2:        Full 2D arrays backing each profile,
+                               needed only for `align_mode="levels"`
+                               (more pixels than the 1D profile give a
+                               far more stable robust-level estimate).
+        level_margin:          Fractional axis position of the
+                               background/foreground levels. Only used
+                               for `align_mode="levels"`.
+        padding:               Headroom fraction kept around each
+                               profile's own data range, regardless of
+                               alignment mode.
+        show_level_lines:      If True and `align_mode="levels"`, draw
+                               dashed reference lines at the detected
+                               levels.
+        title:                  Plot title.
+        xlabel:                 X-axis label override.
+        ylabel_1, ylabel_2:     Y-axis label for each curve. Defaults
+                               to `label_1`/`label_2`.
+        linewidth:              Line width, shared by both curves.
+        alpha:                  Line opacity, shared by both curves.
+        fontsize:               Base font size - see `_style_axes`.
+        figsize:                Figure size.
+        grid:                   Whether to draw a light dotted grid.
+        dpi:                     Resolution used when saving.
+        save_path:              Optional path to save the figure to.
+        show_plot:               If True, call `plt.show()` before
+                                returning.
+
+    Returns:
+        `DualProfileResult` with the figure, both axes, and (for
+        `align_mode="levels"`) the detected levels.
+
+    Raises:
+        VisualizationError: If `align_mode` is invalid, `align_mode=
+            "levels"` is used without `data_1`/`data_2`, or plotting
+            fails for any other reason.
+    """
+    try:
+        if align_mode not in ("zero", "levels", "none"):
+            raise VisualizationError(
+                f"Invalid align_mode '{align_mode}'. Expected 'zero', "
+                "'levels', or 'none'."
+            )
+        if align_mode == "levels" and (data_1 is None or data_2 is None):
+            raise VisualizationError(
+                "align_mode='levels' requires the full 2D arrays data_1 "
+                "and data_2 to estimate robust reference levels."
+            )
+
+        profile_1 = np.asarray(profile_1)
+        profile_2 = np.asarray(profile_2)
+
+        if pixel_size is not None:
+            dy, dx = pixel_size
+            step = dx if profile_axis == "x" else dy
+            x_1 = np.arange(len(profile_1)) * step
+            x_2 = np.arange(len(profile_2)) * step
+        else:
+            x_1 = np.arange(len(profile_1))
+            x_2 = np.arange(len(profile_2))
+
+        fig, ax_1 = plt.subplots(figsize=figsize)
+        ax_2 = ax_1.twinx()
+
+        ax_1.plot(
+            x_1,
+            profile_1,
+            color=color_1,
+            linewidth=linewidth,
+            alpha=alpha,
+            label=label_1,
+        )
+        ax_2.plot(
+            x_2,
+            profile_2,
+            color=color_2,
+            linewidth=linewidth,
+            alpha=alpha,
+            label=label_2,
+        )
+
+        ax_1.set_ylabel(ylabel_1 or label_1, color=color_1)
+        ax_1.tick_params(axis="y", labelcolor=color_1)
+        ax_2.set_ylabel(ylabel_2 or label_2, color=color_2)
+        ax_2.tick_params(axis="y", labelcolor=color_2)
+
+        if xlabel is not None:
+            ax_1.set_xlabel(xlabel)
+        elif pixel_size is not None:
+            axis_letter = "x" if profile_axis == "x" else "y"
+            ax_1.set_xlabel(f"{axis_letter} [{pixel_size_unit}]")
+        else:
+            ax_1.set_xlabel("sample index")
+
+        if grid:
+            ax_1.grid(True, alpha=0.3, linestyle=":")
+
+        ax_1.set_title(title)
+
+        levels = None
+        if align_mode == "zero":
+            _align_zero_multi([ax_1, ax_2], [profile_1, profile_2], padding=padding)
+        elif align_mode == "levels":
+            level_pair = _align_levels_multi(
+                [ax_1, ax_2],
+                [data_1, data_2],
+                [profile_1, profile_2],
+                level_margin=level_margin,
+                padding=padding,
+            )
+            levels = (level_pair[0], level_pair[1])
+            if show_level_lines:
+                for ax, (lo, hi), color in zip(
+                    (ax_1, ax_2), level_pair, (color_1, color_2)
+                ):
+                    ax.axhline(lo, color=color, linestyle="--", linewidth=1, alpha=0.5)
+                    ax.axhline(hi, color=color, linestyle="--", linewidth=1, alpha=0.5)
+        # align_mode == "none": leave both axes on their independent
+        # autoscaled ranges.
+
+        # --- Combined legend from both axes ---
+        lines_1, labels_1 = ax_1.get_legend_handles_labels()
+        lines_2, labels_2 = ax_2.get_legend_handles_labels()
+        ax_1.legend(lines_1 + lines_2, labels_1 + labels_2, loc="upper left")
+
+        _style_axes(ax_1, fontsize)
+        ax_2.set_ylabel(ax_2.get_ylabel(), color=color_2, fontsize=max(fontsize - 2, 1))
+        ax_2.tick_params(axis="y", labelcolor=color_2, labelsize=max(fontsize - 4, 1))
+
+        plt.tight_layout()
+        if save_path:
+            fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+        if show_plot:
+            plt.show()
+
+        return DualProfileResult(fig=fig, ax_1=ax_1, ax_2=ax_2, levels=levels)
+
+    except Exception as e:
+        if isinstance(e, VisualizationError):
+            raise
+        raise VisualizationError(f"Failed to plot dual profile: {e!s}")
+
+
 def plot_structure_comparison(
-    data_list: List[np.ndarray],
-    pixel_size_list: List[Tuple[float, float]],
-    titles: Optional[List[str]] = None,
-    cbar_labels: Optional[List[str]] = None,
-    x_label_heatmap: Optional[List[Optional[str]]] = None,
-    y_label_heatmap: Optional[List[Optional[str]]] = None,
-    profile_labels: Optional[List[str]] = None,
-    profile_colors: Optional[List[str]] = None,
-    x_label_profile: Optional[str] = "X Position",
-    y_label_profile: Optional[List[Optional[str]]] = None,
+    data_list: list[np.ndarray],
+    pixel_size_list: list[tuple[float, float]],
+    titles: list[str] | None = None,
+    cbar_labels: list[str] | None = None,
+    x_label_heatmap: list[str | None] | None = None,
+    y_label_heatmap: list[str | None] | None = None,
+    profile_labels: list[str] | None = None,
+    profile_colors: list[str] | None = None,
+    x_label_profile: str | None = "X Position",
+    y_label_profile: list[str | None] | None = None,
     pixel_size_unit: str = "m",
     profile_axis: str = "x",
-    profile_location: Union[str, int] = "mid",
+    profile_location: str | int = "mid",
     cmap: str = "jet",
-    clip_percentile: Union[bool, Tuple[float, float]] = True,
-    vmin: Optional[List[Optional[float]]] = None,
-    vmax: Optional[List[Optional[float]]] = None,
+    clip_percentile: bool | tuple[float, float] = True,
+    vmin: list[float | None] | None = None,
+    vmax: list[float | None] | None = None,
     same_y_lim: bool = False,
     align_zero: bool = True,
     align_levels: bool = False,
@@ -1102,14 +1976,14 @@ def plot_structure_comparison(
     profile_padding: float = 0.08,
     show_level_lines: bool = True,
     show_center_line: bool = True,
-    suptitle: Optional[str] = None,
-    figsize: Optional[Tuple[float, float]] = None,
-    height_ratios: Tuple[float, float] = (3, 2.5),
+    suptitle: str | None = None,
+    figsize: tuple[float, float] | None = None,
+    height_ratios: tuple[float, float] = (3, 2.5),
     fontsize: int = 14,
     dpi: int = 300,
-    save_path: Optional[str] = None,
+    save_path: str | None = None,
     show_plot: bool = False,
-) -> Tuple[plt.Figure, Dict[str, List[plt.Axes]]]:
+) -> tuple[plt.Figure, dict[str, list[plt.Axes]]]:
     """
     Compare two or three aligned 2D structures: one heatmap per structure
     plus a shared profile plot below.
@@ -1300,11 +2174,11 @@ def plot_structure_comparison(
             2, n, height_ratios=list(height_ratios), hspace=0.4, wspace=0.35
         )
 
-        heatmap_axes: List[plt.Axes] = [fig.add_subplot(gs[0, i]) for i in range(n)]
-        profile_axes: List[plt.Axes] = []
+        heatmap_axes: list[plt.Axes] = [fig.add_subplot(gs[0, i]) for i in range(n)]
+        profile_axes: list[plt.Axes] = []
         # Profiles are extracted once in the heatmap loop below and reused
         # in the profile-plot loop, instead of being extracted twice.
-        profile_data_list: List[np.ndarray] = []
+        profile_data_list: list[np.ndarray] = []
 
         # --- Row 1: heatmaps ---
         profile_index = None  # row/column index shared by all heatmaps + profiles
@@ -1450,16 +2324,16 @@ def plot_structure_comparison(
     except Exception as e:
         if isinstance(e, VisualizationError):
             raise
-        raise VisualizationError(f"Failed to plot structure comparison: {str(e)}")
+        raise VisualizationError(f"Failed to plot structure comparison: {e!s}")
 
 
 def create_masked_overlay(
-    base_image: Union[ImageData, np.ndarray],
+    base_image: ImageData | np.ndarray,
     mask: np.ndarray,
     color: str = "red",
     alpha: float = 0.5,
     title: str = "Masked Overlay",
-    ax: Optional[plt.Axes] = None,
+    ax: plt.Axes | None = None,
     **kwargs,
 ) -> plt.Figure:
     """
@@ -1515,4 +2389,4 @@ def create_masked_overlay(
         return fig
 
     except Exception as e:
-        raise VisualizationError(f"Failed to create masked overlay: {str(e)}")
+        raise VisualizationError(f"Failed to create masked overlay: {e!s}")

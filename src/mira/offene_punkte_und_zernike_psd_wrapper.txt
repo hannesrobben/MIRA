@@ -1,0 +1,183 @@
+MIRA-INTEGRATION: ZERNIKE/PSD-WRAPPER (KONZEPT) UND OFFENE PUNKTE
+====================================================================
+Stand: nach Integration von Bland-Altman, delta_n-Kalibrierung, linearer
+Regression, info/statistics-Dict, Ensemble-DataFrame (Punkt 6) und
+Fehler-vs-Topologie (Punkt 3).
+
+--------------------------------------------------------------------
+TEIL 1: ZERNIKE-ZERLEGUNG UND RADIALE PSD - GEPLANTER WRAPPER
+--------------------------------------------------------------------
+
+Warum dieser Teil noch nicht gebaut wurde:
+Beide Werkzeuge (Zernike-Zerlegung, radiale PSD) existieren laut deinen
+Notizen bereits im offaxisholo/MIRA-Ökosystem, sind dort aber noch nicht
+fertig integriert. Einen Wrapper in mira/analysis/ zu bauen, der auf eine
+Funktion zeigt, die im Zielprojekt noch nicht in ihrer endgueltigen Form
+steht, wuerde entweder auf einer falschen Annahme ueber die Signatur
+basieren oder sofort wieder angepasst werden muessen. Deshalb hier nur
+die Erlaeuterung der Funktionsweise und des Nutzens, damit du beim
+Nachholen der Integration direkt weisst, wie der Wrapper aufgebaut sein
+sollte, sobald die zugrunde liegenden Funktionen stehen.
+
+1.1 Zernike-Zerlegung der Restfehlerkarte
+------------------------------------------
+Was es macht:
+Eine Restfehlerkarte (z.B. eure "error_insitu_developed" oder
+"error_height_developed" aus investigation.py) ist aktuell nur eine
+einzige RMSE-Zahl. Die Zernike-Zerlegung stellt diese 2D-Fehlerkarte
+stattdessen als gewichtete Summe von Zernike-Polynomen dar - das sind
+orthogonale Basisfunktionen auf einer Kreisscheibe, die in der Optik
+Standard sind, weil sie genau den klassischen optischen Aberrationen
+entsprechen: Piston, Tilt (x/y), Defokus, Astigmatismus, Koma,
+sphaerische Aberration, usw.
+
+Warum das nuetzlicher ist als eine RMSE-Zahl:
+Zwei Fehlerkarten koennen dieselbe RMSE haben, aber komplett
+unterschiedliche Ursachen: ein globaler Defokus-Fehler (falsche
+Rekonstruktionsdistanz), ein Tilt (Verkippung der Probe/des Systems),
+oder tatsaechlich zufaelliges, hochfrequentes Rauschen ohne erkennbare
+Struktur. Diese drei Faelle erfordern komplett unterschiedliche
+Massnahmen (Rekonstruktionsparameter korrigieren vs. Probenhalterung
+justieren vs. Rauschunterdrueckung). Die Zernike-Zerlegung trennt genau
+das: Fehler in Koeffizienten fuer definierte, physikalisch interpretierbare
+Fehlerarten, statt einer einzigen Zahl, die alles vermischt.
+
+Was ein fertiger Wrapper liefern sollte:
+- Eingabe: eine Fehlerkarte (2D-Array/masked array) + die Apertur-
+  /Strukturmaske, innerhalb derer zerlegt wird (Zernike-Polynome sind nur
+  auf dem Einheitskreis definiert - die Struktur muss auf eine Kreisscheibe
+  abgebildet werden).
+  Anzahl Ordnungen konfigurierbar (z.B. bis Ordnung 4 oder 6).
+- Ausgabe (nach dem etablierten Muster in dieser Session): eine
+  ZernikeResult-Dataclass mit den Koeffizienten pro Modus (benannt, nicht
+  nur indiziert - "defocus", "astigmatism_0", "astigmatism_45", "coma_x",
+  ...), dem Anteil jedes Modus an der Gesamtvarianz des Fehlers, und dem
+  RMS des nicht erklaerten Rests (peak-to-valley bzw. rms residual nach
+  Abzug der ersten N Moden).
+- Passende Plot-Funktion in plotter_stats.py: Balkendiagramm der
+  Koeffizienten pro Modus (mit Modennamen auf der x-Achse statt nur
+  Zernike-Indizes - deutlich lesbarer fuer's Paper).
+- Sinnvoller Ort: mira/analysis/wavefront.py, als duenner Wrapper um die
+  bestehende offaxisholo-Funktion - die eigentliche Zernike-Mathematik soll
+  dort bleiben, nicht dupliziert werden. Der Wrapper uebernimmt nur:
+  Structure/ImageData-Eingabe entgegennehmen, Maske korrekt aufbereiten,
+  Ergebnis in eurer Dataclass-Konvention zurueckgeben, optional automatisch
+  in structure.statistics ablegen (wie es calculate_delta_n() bereits tut).
+
+1.2 Radiale PSD (Power Spectral Density)
+------------------------------------------
+Was es macht:
+Berechnet das 2D-FFT-Leistungsspektrum der Fehlerkarte (oder der
+Hoehenkarte selbst) und mittelt es radial (ueber alle Winkel bei
+gleichem Ortsfrequenz-Betrag) zu einer 1D-Kurve: Leistung als Funktion
+der Ortsfrequenz.
+
+Warum das nuetzlicher ist als eine RMSE-Zahl:
+Die radiale PSD zeigt, BEI WELCHEN Ortsfrequenzen der Fehler sitzt.
+Hochfrequenter Fehler (kurze Wellenlaengen im Bild, viele Zyklen pro mm)
+deutet auf Speckle-Rauschen oder Pixelrauschen hin - stochastisch, nicht
+durch bessere Modellierung behebbar, nur durch Mittelung/bessere Optik.
+Niederfrequenter Fehler (langsame, grossflaechige Variation) deutet auf
+einen systematischen Modellfehler hin - z.B. eine falsch angenommene
+Kruemmung, einen Rekonstruktionsartefakt, oder genau die
+delta_n-Fehlkalibrierung, die ihr in dieser Session addressiert habt.
+Fuer euren 3.1-Abschnitt (Rauschdiskussion) ist das direkt relevant: die
+PSD kann zeigen, ob das beobachtete Rauschen tatsaechlich weisses/
+hochfrequentes Rauschen ist (stuetzt die "allgemein gehaltene"
+Rauschdiskussion ohne es explizit Speckle zuzuschreiben) oder ob es eine
+erkennbare Struktur bei niedrigen Frequenzen hat (waere ein Hinweis auf
+etwas anderes als reines Messrauschen).
+
+Was ein fertiger Wrapper liefern sollte:
+- Eingabe: eine 2D-Karte (Fehler oder Hoehe) + pixel_size.
+- Ausgabe: PSDResult-Dataclass mit radialer Frequenzachse (in 1/m oder
+  1/mm), gemittelter Leistung pro Frequenz-Bin, und optional der
+  Frequenz, bei der die Leistung auf die Haelfte des Maximalwerts abfaellt
+  (ein einfacher "charakteristischer Skalen"-Kennwert fuers Paper).
+- Passende Plot-Funktion: log-log-Plot der PSD (Standard in der
+  Optik-/Rauschanalyse), mit optionalen Referenzlinien fuer bekannte
+  Rauschmodelle (z.B. 1/f-Rauschen) zum visuellen Vergleich.
+- Sinnvoller Ort: mira/analysis/spectral.py, ebenfalls duenner Wrapper um
+  die vorhandene offaxisholo-Funktion.
+
+Vorgehen, sobald die offaxisholo-Integration fertig ist:
+Schick mir die fertigen Funktionssignaturen (oder den Code) aus
+offaxisholo - dann baue ich die beiden Wrapper-Module + Plot-Funktionen
+nach demselben Muster wie calibration.py/comparison.py/topology.py in
+dieser Session, inklusive Tests mit synthetischen Daten.
+
+
+--------------------------------------------------------------------
+TEIL 2: OFFENE PUNKTE AUS DER GESAMTEN INTEGRATION
+--------------------------------------------------------------------
+
+2.1 Segmentierungs-Duplikat (technische Schuld, nicht neu, aber relevant)
+Es gibt zwei parallele Implementierungen der Segmentierung:
+Structure.segment() (in core/structure.py) und segment_structure() (in
+processing/segmentation.py, die tatsaechlich von StructureProcessor
+aufgerufen wird). Der Patch fuer "Grid-Dimensionen ins info-Dict"
+wurde nur in segment_structure() eingebaut. Falls irgendwo im Code
+Structure.segment() direkt aufgerufen wird (statt ueber den Processor),
+fehlt dort das automatische info-Update. Empfehlung: beide auf eine
+gemeinsame Implementierung zusammenfuehren (aehnlich wie wir es mit der
+Segment-Statistik-Logik in analysis/segment_data.py gemacht haben) -
+aktuell nicht angefasst, um den Rahmen dieser Session nicht zu sprengen.
+
+2.2 statistics-Dict nach dem Laden: nur noch Dicts, keine Dataclasses
+Nach save_snapshot -> load_snapshot (oder save_compressed ->
+load_compressed) enthaelt structure.statistics reine JSON-kompatible
+Dicts, nicht mehr die urspruenglichen DeltaNResult-/RegressionResult-
+Objekte. Falls du nach dem Laden mit dem typisierten Objekt weiterarbeiten
+willst (z.B. result.delta_n statt result["delta_n"]), musst du es
+explizit rekonstruieren: DeltaNResult(**structure.statistics["delta_n_segment_mean"]).
+Eine automatische Rekonstruktion wuerde bedeuten, den Typnamen mit
+abzuspeichern und beim Laden dynamisch zu importieren - bewusst nicht
+gemacht, um keine fragile "Typ-Registry" einzufuehren, ohne dass ein
+konkreter Bedarf dafuer sichtbar ist.
+
+2.3 Bland-Altman noch nicht endgueltig ins Package einsortiert
+Die Bland-Altman-Funktion (aus der allerersten Nachricht dieser Session)
+liegt weiterhin als eigenstaendiges Snippet vor (Compute + Plot in einer
+Funktion), nicht wie die spaeter gebauten Module nach dem Compute/Plot-
+Split (analysis/... + visualization/plotter_stats.py). Fuer volle
+Konsistenz mit dem Rest der jetzt etablierten Architektur sollte sie noch
+in bland_altman_compute() (analysis/comparison.py) und
+plot_bland_altman() (visualization/plotter_stats.py) aufgeteilt werden.
+Bisher bewusst zurueckgestellt, weil du das noch nicht angefordert hattest.
+
+2.4 Kein StructureProcessor-Komfort-Wrapper fuer die Regression
+calculate_delta_n() existiert als Methode direkt auf StructureProcessor
+(inkl. automatischem Eintrag in structure.statistics). Fuer
+fit_segment_regression() gibt es noch keine analoge Processor-Methode -
+sie muss aktuell manuell mit self.structure/reference.structure
+aufgerufen werden, und das Ergebnis muesste manuell per add_statistic()
+abgelegt werden. Kann bei Bedarf nachgezogen werden.
+
+2.5 Noch nicht umgesetzte Punkte aus dem urspruenglichen 9-Punkte-Plan
+- Punkt 4 (Zernike) und Punkt 5 (PSD): siehe Teil 1 oben - wartet auf
+  die offaxisholo-Integration.
+- Punkt 7 (Sensitivitaetsanalyse n_resin/n_air): noch nicht gebaut. Waere
+  ein Sweep, der calculate_delta_n() wiederholt mit variierten
+  Parametern aufruft - technisch einfach, sobald gewuenscht.
+- Punkt 8 (Wiederholmessung/Instrumentenrauschen): analysis/ensemble.py
+  liefert bereits die Grundlage (summarize_by_group mit CV), eine
+  dedizierte ICC-Berechnung (Intraclass Correlation) fehlt noch als
+  eigene Funktion.
+- Punkt 9 (SEM/AFM/LSM/DHM-Vergleichstabelle): reine Text-/Tabellenarbeit
+  fuers Paper, kein Code-Task.
+
+2.6 Neue Abhaengigkeit
+pandas wird von analysis/ensemble.py benoetigt (nur bei tatsaechlichem
+Aufruf importiert, kein Hard-Dependency beim Modul-Import) - muss in die
+Projekt-Requirements aufgenommen werden, falls noch nicht vorhanden.
+
+2.7 Gefundener und behobener Bug (zur Kenntnisnahme)
+In der urspruenglichen Bland-Altman-Funktion und im ersten Entwurf von
+analysis/topology.py wurden maskierte Arrays (numpy.ma.MaskedArray) durch
+die Pruefung "hasattr(x, 'data')" faelschlich entmaskiert - denn auch
+MaskedArray selbst hat ein .data-Attribut, das aber die Rohwerte OHNE
+Maske zurueckgibt. Beide Stellen wurden korrigiert und mit einem echten
+maskierten Testfall verifiziert. Falls du an anderen Stellen im Code
+(auch ausserhalb dieser Session) das Muster "x.data if hasattr(x, 'data')
+else x" zur Extraktion von ImageData-Werten findest, lohnt sich eine
+Pruefung, ob dieselbe Falle dort ebenfalls zuschlagen kann.

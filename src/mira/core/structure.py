@@ -7,11 +7,32 @@ including the main Structure class and its components (Segment, Background).
 
 from __future__ import annotations
 
+import json
 import numpy as np
 import numpy.ma as ma
 import cv2
 from dataclasses import dataclass, field
-from typing import Tuple, List, Optional
+from pathlib import Path
+from typing import Tuple, List, Optional, Dict, Union, Any
+
+
+def _erode_mask_by_pixels(mask: np.ndarray, offset_pixels: int) -> np.ndarray:
+    """
+    Erode a boolean mask inward by a fixed number of pixels.
+
+    Args:
+        mask: Boolean mask, True where data is valid.
+        offset_pixels: Number of pixels to erode from every edge of the
+            valid region. 0 (or negative) returns the mask unchanged.
+
+    Returns:
+        Eroded boolean mask (same shape as input).
+    """
+    if offset_pixels <= 0:
+        return mask.copy()
+    from scipy.ndimage import binary_erosion
+
+    return binary_erosion(mask, iterations=offset_pixels)
 
 
 class StructureError(Exception):
@@ -85,6 +106,23 @@ class Background:
         margin_mask = bg_mask & ~eroded_mask
 
         return margin_mask
+
+    def erode_by_pixels(self, offset_pixels: int = 0) -> ma.MaskedArray:
+        """
+        Extract background data with a fixed-pixel margin excluded from
+        its edges.
+
+        Args:
+            offset_pixels: Number of pixels to erode from the background's
+                edges. 0 (default) returns the background data unchanged.
+
+        Returns:
+            Masked array with only the eroded (inner) background region
+            unmasked.
+        """
+        valid_mask = ~self.data.mask
+        eroded_mask = _erode_mask_by_pixels(valid_mask, offset_pixels)
+        return ma.masked_array(self.data.data, mask=~eroded_mask)
 
 
 @dataclass
@@ -222,6 +260,27 @@ class Segment:
         result = ma.masked_array(self.data.data, mask=~inner_mask)
         return result
 
+    def erode_by_pixels(self, offset_pixels: int = 0) -> ma.MaskedArray:
+        """
+        Extract segment data with a fixed-pixel margin excluded from the
+        edges.
+
+        Use this instead of `extract_with_offset` when segmentation
+        boundaries may be off by a few pixels and you want to exclude
+        exactly that many pixels near every segment edge, regardless of
+        the segment's overall size.
+
+        Args:
+            offset_pixels: Number of pixels to erode from the segment's
+                edges. 0 (default) returns the segment data unchanged.
+
+        Returns:
+            Masked array with only the eroded (inner) region unmasked.
+        """
+        valid_mask = ~self.data.mask
+        eroded_mask = _erode_mask_by_pixels(valid_mask, offset_pixels)
+        return ma.masked_array(self.data.data, mask=~eroded_mask)
+
 
 @dataclass
 class Structure:
@@ -243,6 +302,15 @@ class Structure:
     _center: Optional[Tuple[float, float]] = field(default=None, init=False)
     _bounds: Optional[Tuple[slice, slice]] = field(default=None, init=False)
     _corner_points: Optional[np.ndarray] = field(default=None, init=False)
+    info: Dict[str, "Any"] = field(default_factory=dict)
+    statistics: Dict[str, "Any"] = field(default_factory=dict)
+
+    # File format version for save_compressed()/load_compressed() and for
+    # the structure portion of StructureProcessor.save_snapshot(). Bump
+    # this whenever the on-disk payload layout changes in a way that older
+    # readers could not handle, so a version mismatch fails with a clear
+    # error instead of a cryptic KeyError.
+    FORMAT_VERSION = 1
 
     def __post_init__(self):
         """Initialize and validate the structure."""
@@ -523,6 +591,289 @@ class Structure:
             )
 
             return physical_perimeter
+
+    def refresh_info(self) -> Dict[str, "Any"]:
+        """
+        Recompute geometry-derived facts and merge them into `self.info`.
+
+        Only the auto-computed keys below are overwritten; any custom keys
+        already present (e.g. identifiers set via `set_info`, such as
+        "doe_id" or "print_id") are left untouched. Call this again after
+        segmenting or resizing the structure to keep the dimensions current.
+
+        Returns:
+            The updated `self.info` dict.
+        """
+        y_slice, x_slice = self.bounds
+        height_px = int(y_slice.stop - y_slice.start)
+        width_px = int(x_slice.stop - x_slice.start)
+        dy, dx = self.pixel_size
+
+        # Cast explicitly to native Python types (not np.int64/np.float64,
+        # which self.bounds/self.pixel_size/self.area may hand back) so
+        # `self.info` stays directly json.dump-able without a separate
+        # to_json_safe() pass, unlike `self.statistics` which holds
+        # arbitrary result objects and needs that conversion regardless.
+        self.info.update(
+            {
+                "shape_px": tuple(int(s) for s in self.data.shape),
+                "bounding_box_px": (height_px, width_px),
+                "physical_width": float(width_px * dx),
+                "physical_height": float(height_px * dy),
+                "pixel_size": tuple(float(p) for p in self.pixel_size),
+                "area": float(self.area),
+                "n_segments": len(self.segments),
+            }
+        )
+        return self.info
+
+    def set_info(self, **kwargs) -> None:
+        """
+        Add or update custom identification metadata (e.g. `doe_id`,
+        `print_id`, `structure_type`) in `self.info`, alongside the
+        auto-computed geometry keys from `refresh_info`.
+
+        This is the metadata `analysis.ensemble.build_ensemble_dataframe`
+        reads its identifying columns from - set here once per structure,
+        used everywhere downstream.
+
+        Args:
+            **kwargs: Arbitrary key/value pairs to merge into `self.info`.
+        """
+        self.info.update(kwargs)
+
+    def add_statistic(self, name: str, result: "Any") -> None:
+        """
+        Store an analysis result under `name` in `self.statistics`.
+
+        Args:
+            name: Key to store the result under (e.g. "delta_n_segment_mean",
+                "regression_vs_sensofar"). Overwrites any existing entry
+                with the same name.
+            result: The result to store - typically a dataclass such as
+                `DeltaNResult`, `RegressionResult`, or `BlandAltmanResult`,
+                but any value is accepted.
+        """
+        self.statistics[name] = result
+
+    def statistics_summary(self) -> Dict[str, "Any"]:
+        """
+        JSON-serializable snapshot of everything stored in `self.statistics`.
+
+        Converts dataclass results (and any numpy values inside them) into
+        plain Python types via `mira.utils.serialization.to_json_safe`, so
+        the returned dict can be passed straight to `json.dump` - this is
+        the direct replacement for manually building an `info_dictionary`
+        dict before dumping it to `information_dictionary.json`.
+
+        Returns:
+            Dict mapping each statistic's name to its JSON-safe value.
+        """
+        from ..utils.serialization import to_json_safe
+
+        return {name: to_json_safe(result) for name, result in self.statistics.items()}
+
+    def _segments_payload(self) -> Dict[str, np.ndarray]:
+        """
+        Build the segment part of a serialized payload.
+
+        Returns a stacked boolean mask array (one layer per segment, True =
+        segment pixel) plus the matching segment ids, as separate arrays -
+        npz has no native concept of "a list of masked arrays", so a list of
+        N same-shape 2D masks is stacked into one 3D array instead of saved
+        as N separate keys, which would need a variable, run-dependent set
+        of key names. Returns empty (zero-length) arrays when there are no
+        segments, so callers never need a separate no-segments branch.
+
+        Returns:
+            Dict with keys "segment_ids" (shape (N,), int32) and
+            "segment_masks" (shape (N, *data.shape), bool).
+        """
+        if not self.segments:
+            return {
+                "segment_ids": np.empty((0,), dtype=np.int32),
+                "segment_masks": np.empty((0,) + self.data.shape, dtype=bool),
+            }
+        ids = np.array([seg.id for seg in self.segments], dtype=np.int32)
+        masks = np.stack([~seg.data.mask for seg in self.segments], axis=0)
+        return {"segment_ids": ids, "segment_masks": masks}
+
+    def _mask_payload(self) -> Dict[str, np.ndarray]:
+        """
+        Build the geometry-only part of a serialized payload.
+
+        Contains the structure mask, pixel size, segment masks/ids, and the
+        `info`/`statistics` dicts - deliberately WITHOUT the underlying data
+        array. This is the single source of truth for what "structure
+        geometry + metadata" means on disk.
+
+        `info` and `statistics` are stored as JSON strings (0-d numpy
+        arrays), matching the pattern already used for
+        `StructureProcessor`'s `metadata_json` - npz has no native dict
+        type and this repo avoids `allow_pickle=True`. `statistics` is run
+        through `to_json_safe` first, since its values are typically result
+        dataclasses (DeltaNResult, RegressionResult, ...) rather than
+        already-plain types.
+
+        Returns:
+            Dict of numpy arrays, ready to be merged into a larger
+            ``np.savez_compressed`` payload (see ``save_compressed`` and
+            ``StructureProcessor.save_snapshot``).
+        """
+        from ..utils.serialization import to_json_safe
+
+        payload = {
+            "structure_mask": ~self.data.mask,
+            "structure_pixel_size": np.array(self.pixel_size, dtype=np.float64),
+        }
+        payload.update(self._segments_payload())
+        # `self.info` is normally already JSON-safe (refresh_info() casts
+        # to native types), but `to_json_safe` is applied here too as a
+        # cheap safety net against a numpy value slipping in via a custom
+        # set_info(...) call.
+        payload["info_json"] = np.array(json.dumps(to_json_safe(self.info)))
+        payload["statistics_json"] = np.array(json.dumps(to_json_safe(self.statistics)))
+        return payload
+
+    @classmethod
+    def _from_mask_payload(
+        cls, payload: Dict[str, np.ndarray], raw_data: np.ndarray
+    ) -> "Structure":
+        """
+        Reconstruct a Structure from a ``_mask_payload()``-shaped dict and an
+        externally supplied raw data array.
+
+        This is the inverse of ``_mask_payload``, used whenever the raw data
+        lives elsewhere - e.g. a raw channel array a
+        ``StructureProcessor`` snapshot just loaded independently. The mask
+        defines the geometry, ``raw_data`` supplies the values, and
+        ``Structure.from_mask`` combines the two, exactly as it does for a
+        freshly detected structure.
+
+        Args:
+            payload: Dict as produced by ``_mask_payload`` (or an
+                ``np.load`` result containing the same keys) - must contain
+                "structure_mask" and "structure_pixel_size"; "segment_ids"
+                and "segment_masks" are optional.
+            raw_data: Raw channel array to combine with the stored mask.
+                Must have the same shape as the stored mask.
+
+        Returns:
+            Reconstructed Structure, with segments restored if present.
+
+        Raises:
+            StructureError: If ``raw_data``'s shape does not match the
+                stored mask's shape.
+        """
+        mask = np.asarray(payload["structure_mask"])
+        if raw_data.shape != mask.shape:
+            raise StructureError(
+                f"_from_mask_payload: raw_data shape {raw_data.shape} does "
+                f"not match the stored structure mask shape {mask.shape}."
+            )
+
+        pixel_size = tuple(np.asarray(payload["structure_pixel_size"]).tolist())
+        structure = cls.from_mask(raw_data, mask, pixel_size=pixel_size)
+
+        seg_ids = payload.get("segment_ids", np.empty((0,), dtype=np.int32))
+        seg_masks = payload.get(
+            "segment_masks", np.empty((0,) + mask.shape, dtype=bool)
+        )
+        segments = []
+        for seg_id, seg_mask in zip(seg_ids, seg_masks):
+            segments.append(
+                Segment(
+                    data=ma.masked_array(raw_data, mask=~seg_mask),
+                    pixel_size=pixel_size,
+                    id=int(seg_id),
+                )
+            )
+        structure.segments = segments
+
+        info_json = payload.get("info_json")
+        if info_json is not None:
+            structure.info = json.loads(str(info_json))
+
+        statistics_json = payload.get("statistics_json")
+        if statistics_json is not None:
+            structure.statistics = json.loads(str(statistics_json))
+
+        return structure
+
+    def save_compressed(self, file_path: Union[str, Path]) -> Path:
+        """
+        Save this structure as a single, self-contained compressed .npz file.
+
+        Includes the raw data array, so the file can be loaded back into a
+        fully usable Structure entirely on its own, independent of any
+        StructureProcessor - the right choice for sharing, archiving, or
+        inspecting one structure in isolation. If the matching raw channel
+        is already being stored separately (e.g. as part of a full
+        StructureProcessor snapshot), use ``_mask_payload`` instead so the
+        same array is not written to disk twice - see
+        ``StructureProcessor.save_snapshot``.
+
+        The write is atomic: the payload is written to a temporary file
+        first and only renamed to ``file_path`` on success, so a crash
+        mid-write can never leave a corrupt file at the target path.
+
+        Args:
+            file_path: Destination path. A ".npz" suffix is appended if
+                missing. Parent directories are created as needed.
+
+        Returns:
+            The resolved Path the file was written to.
+        """
+        file_path = Path(file_path)
+        if file_path.suffix != ".npz":
+            file_path = file_path.with_suffix(".npz")
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        payload = self._mask_payload()
+        payload["data"] = self.data.data
+        payload["format_version"] = np.array(self.FORMAT_VERSION)
+
+        # np.savez_compressed silently appends ".npz" to the filename unless
+        # it already ends with ".npz" - so the temp name must end in ".npz"
+        # too, or numpy would write "<tmp_path>.npz" instead of tmp_path,
+        # and the rename below would fail to find its source file.
+        tmp_path = file_path.with_name(file_path.stem + ".tmp.npz")
+        np.savez_compressed(tmp_path, **payload)
+        tmp_path.replace(file_path)
+
+        return file_path
+
+    @classmethod
+    def load_compressed(cls, file_path: Union[str, Path]) -> "Structure":
+        """
+        Load a Structure previously written by ``save_compressed``.
+
+        Args:
+            file_path: Path to the .npz file.
+
+        Returns:
+            Reconstructed Structure, including segments if any were saved.
+
+        Raises:
+            StructureError: If the file is missing required keys or was
+                written by an incompatible format version.
+        """
+        file_path = Path(file_path)
+        with np.load(file_path, allow_pickle=False) as npz:
+            if "format_version" not in npz.files or "data" not in npz.files:
+                raise StructureError(
+                    f"{file_path}: not a valid Structure export "
+                    "(missing 'format_version' or 'data')."
+                )
+            version = int(npz["format_version"])
+            if version != cls.FORMAT_VERSION:
+                raise StructureError(
+                    f"{file_path}: unsupported Structure file format "
+                    f"version {version} (expected {cls.FORMAT_VERSION})."
+                )
+            payload = {key: npz[key] for key in npz.files}
+
+        return cls._from_mask_payload(payload, payload["data"])
 
     def realign(self) -> Structure:
         """

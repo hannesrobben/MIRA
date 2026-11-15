@@ -16,10 +16,12 @@ from ..utils.exceptions import ProcessingError, SegmentationError, ValidationErr
 from ..utils.helpers import find_line_intersection, point_in_quadrilateral
 
 
-def segment_structure(structure: Structure,
-                      method: Literal['grid', 'kmeans', 'watershed'] = 'grid',
-                      num_segments: Tuple[int, int] = (2, 2),
-                      **kwargs) -> List[Segment]:
+def segment_structure(
+    structure: Structure,
+    method: Literal["grid", "kmeans", "watershed"] = "grid",
+    num_segments: Tuple[int, int] = (2, 2),
+    **kwargs,
+) -> List[Segment]:
     """
     Segment a structure into multiple parts.
 
@@ -38,17 +40,23 @@ def segment_structure(structure: Structure,
     """
     try:
         # Dispatch to appropriate segmentation method
-        if method == 'grid':
+        if method == "grid":
             segments = segment_by_grid(structure, num_segments, **kwargs)
-        elif method == 'kmeans':
+        elif method == "kmeans":
             segments = segment_by_kmeans(structure, num_segments, **kwargs)
-        elif method == 'watershed':
+        elif method == "watershed":
             segments = segment_by_watershed(structure, num_segments, **kwargs)
         else:
             raise ValidationError(f"Unknown segmentation method: {method}")
 
-        # Update structure's segments
+        # Update structure's segments, then record the segmentation
+        # configuration in structure.info so downstream consumers (e.g.
+        # analysis.ensemble) know how the structure was segmented without
+        # having to be told again.
         structure.segments = segments
+        structure.info["segmentation_method"] = method
+        structure.info["segmentation_grid_shape"] = tuple(num_segments)
+        structure.refresh_info()
 
         return segments
 
@@ -58,10 +66,12 @@ def segment_structure(structure: Structure,
         raise SegmentationError(f"Structure segmentation failed: {str(e)}")
 
 
-def segment_by_grid(structure: Structure,
-                    num_segments: Tuple[int, int],
-                    use_corners: bool = True,
-                    **kwargs) -> List[Segment]:
+def segment_by_grid(
+    structure: Structure,
+    num_segments: Tuple[int, int],
+    use_corners: bool = True,
+    **kwargs,
+) -> List[Segment]:
     """
     Segment a structure using a grid-based approach.
 
@@ -102,7 +112,9 @@ def segment_by_grid(structure: Structure,
 
                 # Check if we have enough corners
                 if len(corners) < 4:
-                    raise SegmentationError("Not enough corners detected for grid segmentation")
+                    raise SegmentationError(
+                        "Not enough corners detected for grid segmentation"
+                    )
 
                 # Extract corner points (clockwise from top-left)
                 tl, tr, br, bl = corners[:4]
@@ -159,21 +171,29 @@ def segment_by_grid(structure: Structure,
                 # Calculate the four corners of this segment
                 segment_corners = [
                     find_line_intersection(
-                        row_left_points[row], row_right_points[row],
-                        col_upper_points[col], col_lower_points[col]
+                        row_left_points[row],
+                        row_right_points[row],
+                        col_upper_points[col],
+                        col_lower_points[col],
                     ),
                     find_line_intersection(
-                        row_left_points[row], row_right_points[row],
-                        col_upper_points[col + 1], col_lower_points[col + 1]
+                        row_left_points[row],
+                        row_right_points[row],
+                        col_upper_points[col + 1],
+                        col_lower_points[col + 1],
                     ),
                     find_line_intersection(
-                        row_left_points[row + 1], row_right_points[row + 1],
-                        col_upper_points[col + 1], col_lower_points[col + 1]
+                        row_left_points[row + 1],
+                        row_right_points[row + 1],
+                        col_upper_points[col + 1],
+                        col_lower_points[col + 1],
                     ),
                     find_line_intersection(
-                        row_left_points[row + 1], row_right_points[row + 1],
-                        col_upper_points[col], col_lower_points[col]
-                    )
+                        row_left_points[row + 1],
+                        row_right_points[row + 1],
+                        col_upper_points[col],
+                        col_lower_points[col],
+                    ),
                 ]
 
                 # Check if any intersection failed
@@ -187,21 +207,22 @@ def segment_by_grid(structure: Structure,
                 for y in range(height):
                     for x in range(width):
                         if structure_mask[y, x]:
-                            if point_in_quadrilateral(np.array([y, x]), segment_corners):
+                            if point_in_quadrilateral(
+                                np.array([y, x]), segment_corners
+                            ):
                                 segment_mask[y, x] = True
                                 labeled_array[y, x] = segment_id
 
                 # Create segment if there are any points
                 if np.any(segment_mask):
                     segment_data = ma.masked_array(
-                        structure.data.data,
-                        mask=~segment_mask
+                        structure.data.data, mask=~segment_mask
                     )
 
                     segment = Segment(
                         data=segment_data,
                         pixel_size=structure.pixel_size,
-                        id=segment_id
+                        id=segment_id,
                     )
 
                     segments.append(segment)
@@ -215,10 +236,9 @@ def segment_by_grid(structure: Structure,
         raise SegmentationError(f"Grid segmentation failed: {str(e)}")
 
 
-def segment_by_kmeans(structure: Structure,
-                      num_segments: Tuple[int, int],
-                      random_state: int = 0,
-                      **kwargs) -> List[Segment]:
+def segment_by_kmeans(
+    structure: Structure, num_segments: Tuple[int, int], random_state: int = 0, **kwargs
+) -> List[Segment]:
     """
     Segment a structure using K-means clustering.
 
@@ -266,7 +286,7 @@ def segment_by_kmeans(structure: Structure,
         for i in range(n_clusters):
             # Create mask for this segment
             segment_mask = np.zeros(structure.data.shape, dtype=bool)
-            segment_indices = (labels == i)
+            segment_indices = labels == i
 
             if not np.any(segment_indices):
                 continue
@@ -277,16 +297,9 @@ def segment_by_kmeans(structure: Structure,
             segment_mask[segment_y, segment_x] = True
 
             # Create segment
-            segment_data = ma.masked_array(
-                structure.data.data,
-                mask=~segment_mask
-            )
+            segment_data = ma.masked_array(structure.data.data, mask=~segment_mask)
 
-            segment = Segment(
-                data=segment_data,
-                pixel_size=structure.pixel_size,
-                id=i
-            )
+            segment = Segment(data=segment_data, pixel_size=structure.pixel_size, id=i)
 
             segments.append(segment)
 
@@ -298,10 +311,12 @@ def segment_by_kmeans(structure: Structure,
         raise SegmentationError(f"K-means segmentation failed: {str(e)}")
 
 
-def segment_by_watershed(structure: Structure,
-                         num_segments: Tuple[int, int],
-                         compactness: float = 0.0,
-                         **kwargs) -> List[Segment]:
+def segment_by_watershed(
+    structure: Structure,
+    num_segments: Tuple[int, int],
+    compactness: float = 0.0,
+    **kwargs,
+) -> List[Segment]:
     """
     Segment a structure using the watershed algorithm.
 
@@ -361,28 +376,25 @@ def segment_by_watershed(structure: Structure,
                     marker_id += 1
 
         # Apply watershed
-        labels = watershed(-distance, markers, mask=structure_mask, compactness=compactness, **kwargs)
+        labels = watershed(
+            -distance, markers, mask=structure_mask, compactness=compactness, **kwargs
+        )
 
         # Create segments
         segments = []
 
         for i in range(1, marker_id):
             # Create mask for this segment
-            segment_mask = (labels == i)
+            segment_mask = labels == i
 
             if not np.any(segment_mask):
                 continue
 
             # Create segment
-            segment_data = ma.masked_array(
-                structure.data.data,
-                mask=~segment_mask
-            )
+            segment_data = ma.masked_array(structure.data.data, mask=~segment_mask)
 
             segment = Segment(
-                data=segment_data,
-                pixel_size=structure.pixel_size,
-                id=i - 1
+                data=segment_data, pixel_size=structure.pixel_size, id=i - 1
             )
 
             segments.append(segment)

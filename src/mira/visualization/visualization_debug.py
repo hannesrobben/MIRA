@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
+import os
 
 
 def plot_structure_properties(
-    structure, reference_structure=None, suptitle=None
+    structure, reference_structure=None, suptitle=None, save_path=None
 ) -> None:
     # shortcut for plotting
     if suptitle is None:
@@ -18,7 +19,10 @@ def plot_structure_properties(
     # axs[1, 0].set_title("edges Image")
     # axs[1, 1].imshow(structure.bounds, cmap="gray")
     # axs[1, 1].set_title("Bound Image")
-    plt.show()
+    if save_path is not None:
+        plt.savefig(os.path.join(save_path, f"{suptitle}_debug.png"))
+    else:
+        plt.show()
     if reference_structure is not None:
         fig, axs = plt.subplots(2, 2, figsize=(20, 10))
         fig.suptitle(suptitle, fontsize=16)
