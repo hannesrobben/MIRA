@@ -20,7 +20,7 @@ Project files:
 - `TODO.md`: the task list (sections Open / In Progress / Blocked / Done; format rules, phase plan and open decisions at the top). It includes the open points of the DOE analysis session (phase A).
 - `WORKLOG.md`: append-only work log (see "Work log").
 - `docs/system/SOFTWARE_PLAN_OVERVIEW.md`: the plan for the four cooperating repositories (copy; master in NanoFactorySystem_automated).
-- `src/mira/zusammenfassung_aenderungen_und_tests.txt` and `src/mira/offene_punkte_und_zernike_psd_wrapper.txt` (German): summary and open points of the DOE analysis session (Bland-Altman, Δn calibration, regression, info / statistics dicts, ensembles, snapshots, topology, sensitivity, ICC, planned Zernike / PSD wrappers). Their open items are in `TODO.md`; the files move to `docs/` with MI-01.
+- `docs/notes/zusammenfassung_aenderungen_und_tests.txt` and `docs/notes/offene_punkte_und_zernike_psd_wrapper.txt` (German): summary and open points of the DOE analysis session (Bland-Altman, Δn calibration, regression, info / statistics dicts, ensembles, snapshots, topology, sensitivity, ICC, planned Zernike / PSD wrappers). Their open items are in `TODO.md`; they moved from `src/mira/` to `docs/notes/` with MI-01.
 - `MIRA_tree.txt`: an old tree snapshot (gitignored).
 
 ## Commands
@@ -85,7 +85,7 @@ Everything is written in English: variable, function, class and module names, do
 comments, README and other documentation, design documents, todo entries, commit messages,
 pull request texts and log entries. If you encounter German identifiers or comments within
 the scope of your current task, translate them. Outside that scope, add a todo instead of
-renaming them unasked. The German session notes in `src/mira/*.txt` are translated when their
+renaming them unasked. The German session notes in `docs/notes/*.txt` are translated when their
 content is turned into documentation.
 
 ### Session start
