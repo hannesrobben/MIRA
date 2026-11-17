@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+import numpy.ma as ma
 from scipy import stats
 
 from ..core.structure import Structure
@@ -74,19 +75,33 @@ def fit_linear_regression(x: np.ndarray, y: np.ndarray) -> RegressionResult:
     Fit an ordinary least-squares line y = slope*x + intercept.
 
     Args:
-        x: Independent variable values.
+        x: Independent variable values. A masked array is allowed; every
+           pair in which `x` or `y` is masked is left out of the fit.
         y: Dependent variable values, same length as `x`.
 
     Returns:
         RegressionResult with fit parameters and quality metrics.
+        `x_values` / `y_values` hold only the pairs used in the fit.
 
     Raises:
         ValidationError: If `x`/`y` have mismatched lengths or fewer than
-            two points.
+            two (unmasked) points.
         ProcessingError: If the fit itself fails (e.g. no variation in x).
     """
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
+    if isinstance(x, ma.MaskedArray) or isinstance(y, ma.MaskedArray):
+        x_masked = ma.asarray(x, dtype=float)
+        y_masked = ma.asarray(y, dtype=float)
+        if x_masked.shape != y_masked.shape:
+            raise ValidationError(
+                f"x and y must have the same shape, got {x_masked.shape} and "
+                f"{y_masked.shape}."
+            )
+        keep = ~(ma.getmaskarray(x_masked) | ma.getmaskarray(y_masked))
+        x = x_masked.data[keep]
+        y = y_masked.data[keep]
+    else:
+        x = np.asarray(x, dtype=float)
+        y = np.asarray(y, dtype=float)
 
     if x.shape != y.shape:
         raise ValidationError(
