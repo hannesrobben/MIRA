@@ -43,7 +43,7 @@ __all__ = [
     "plot_dual_profile",
     "DualProfileResult",
     "plot_bland_altman",
-    "BlandAltmanResult"
+    "BlandAltmanResult",
     # 3D plotting
     "plot_surface",
     "plot_structure_3d",
