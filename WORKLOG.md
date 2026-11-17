@@ -31,3 +31,178 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
      Files: `TODO.md` (new), `WORKLOG.md` (new)
 - **Follow-ups:** MI-04 needs the location of the DOE3 test suite; MI-01 needs the approval of the attic
   list; the untracked folder `todo_claude/` can be removed once the maintainer has reviewed these files.
+
+### 2026-11-17 13:02 CET — [MI-03] Commit the project files
+- **Status:** done
+- **Context:** Maintainer request of 2026-11-17: read the whole repository (incl. `todo_claude/` and all
+  `.md` files), summarise the todos and work off every todo that needs no decision. The project files of
+  MI-03 were still untracked; the todo bookkeeping of this session needs them in git.
+- **Changes:** none beyond committing the files of the previous entry unchanged, with the proposed
+  messages, on branch `docs/project-files` (from `main`). All further work is on
+  `feat/baseline-and-analysis-backlog`, branched from `docs/project-files`.
+- **Tests:** none (documentation only).
+- **Commits:** `b819b2c` docs(system): add the plan for the four cooperating repositories [MI-03],
+  `bf079be` docs: add CLAUDE.md with architecture, rules and commit conventions [MI-03],
+  `fe99316` docs(todo): plan registration, fusion, stitching and comparison work [MI-03]
+- **Follow-ups:** `todo_claude/` stays untracked; it only holds the v0.1 drafts (`04_MIRA_PLAN.md`,
+  `00_SOFTWARE_PLAN_OVERVIEW.md`) and the CLAUDE.md of nanofactorysystem used as template. Everything in it
+  is absorbed into `CLAUDE.md`, `TODO.md` and `docs/system/`; the maintainer can delete the folder.
+
+### 2026-11-17 13:02 CET — [MI-01] Session notes to docs/notes, attic proposal
+- **Status:** partial (the move of legacy files waits for M1; follow-up MI-08)
+- **Changes:**
+  - `src/mira/offene_punkte_und_zernike_psd_wrapper.txt` (renamed → `docs/notes/offene_punkte_und_zernike_psd_wrapper.txt`)
+  - `src/mira/zusammenfassung_aenderungen_und_tests.txt` (renamed → `docs/notes/zusammenfassung_aenderungen_und_tests.txt`)
+  - `docs/ATTIC_REVIEW.md` (new): diff of the Seafile conflict copy against `plotter_2d.py` (one docstring
+    of `plot_dual_profile`, no code), the 19 legacy files with lines and last commit, the Bland-Altman
+    modules, two further candidates (`MIRA_composition.py`, empty `tests/_test/test_dhm.py`).
+  - `CLAUDE.md`: new path of the notes.
+  - `TODO.md`: new path of the notes (in the bookkeeping commit).
+- **Tests:** none (documentation and file moves; no module imports the notes).
+- **Commits:** `ebfc2b0` docs: move the DOE session notes to docs/notes and list attic candidates [MI-01]
+- **Follow-ups:** MI-08 (move the approved files, needs M1). Note for M1: the MI-01 text says
+  "`bland_altman_snippet.py` if superseded by `bland_altman.py`"; it was the other way round, see the review.
+
+### 2026-11-17 13:02 CET — [MI-05] Import hygiene
+- **Status:** done
+- **Changes:**
+  - `src/mira/processor.py`: cv2, matplotlib and the debug plot imported in the methods that use them;
+    `_CV2_INTER_LINEAR` as default of `apply_affine_transform`.
+  - `src/mira/core/structure.py`, `src/mira/processing/alignment.py`: lazy cv2 import.
+  - `src/mira/processing/registration.py`: lazy cv2 import; `ECCRefinement._MOTION` holds the names of
+    the cv2 constants.
+  - `src/mira/core/image.py`: lazy pandas import (CSV read / write only).
+  - `tests/conftest.py` (new): Agg backend.
+  - `tests/test_import_hygiene.py` (new): `sys.modules` after `import mira` (and analysis/processing
+    modules) in a subprocess; constant and motion names checked against cv2.
+  - `tests/test_processor_smoke.py` (new): detection, perimeter, `apply_affine_transform` with segments,
+    both refiners on synthetic fields.
+- **Tests:** `python -m pytest`: 9 passed, 1 xfailed (ECC, see MI-79).
+- **Commits:** `e3adbbd` refactor(processor): import OpenCV, matplotlib and pandas on use [MI-05]
+- **Follow-ups:** MI-79 (new): `ECCRefinement` returns the inverse warp; verified on a textured field
+  shifted by (2, -3) px: after `cv2.warpAffine(moving, M)` the RMS error is 0.317 with ECC and 0.0 with
+  phase correlation. Test is `xfail(strict=True)`; decision M11 (new) because the fix may change published
+  numbers if `refine="ecc"`/`True` was used.
+
+### 2026-11-17 13:02 CET — [MI-02] Packaging
+- **Status:** partial (Python / NumPy baseline waits for M9; follow-up MI-07)
+- **Changes:**
+  - `pyproject.toml`: removed the dynamic dependency table (missing `requirements.txt`); core
+    dependencies numpy, scipy, opencv-python>=4.10.0.84, scikit-image, scikit-learn; extras `viz`
+    (matplotlib), `analysis` (pandas), `dev` (both + pytest, black, yapf, numpydoc, pingouin); author and
+    description set; pillow dropped (no module imports it).
+- **Tests:** two fresh virtual environments in the scratchpad (Python 3.12.3, NumPy 2.5.5, OpenCV
+  5.0.0.93, pandas 3.1.1): `pip install -e ".[dev]"` + `python -m pytest` → 9 passed, 1 xfailed;
+  `pip install -e .` → `import mira` loads neither matplotlib nor pandas, detect + segment work,
+  `import mira.visualization` fails with "No module named 'matplotlib'" as expected.
+- **Commits:** `4280aec` build(packaging): declare dependencies once and add viz/analysis extras [MI-02]
+  (pingouin added to `dev` in `91c2cd5`)
+- **Follow-ups:** MI-07 (new, needs M9). The local `.venv` was empty (no numpy); the dependencies were
+  installed into it. The system Python 3.12 has an OpenCV build that fails under NumPy 2.
+
+### 2026-11-17 13:02 CET — [MI-77] Audit of the masked-array unmasking pattern
+- **Status:** done
+- **Changes:**
+  - `src/mira/analysis/comparison.py`: `fit_linear_regression` leaves pairs masked in x or y out (it used
+    `np.asarray`, which drops the mask); plain arrays take the old path.
+  - `tests/test_masked_inputs.py` (new): regression parity with scipy, masked outliers, too few points,
+    topology with a masked corner (2400 of 2500 pixels).
+  - Audit result (also in the commit message): `analysis/topology.py` and `bland_altman_snippet.py` were
+    already correct; `visualization/bland_altman.py` unmasked (replaced in MI-72); `compute_icc` unmasked
+    (fixed in MI-76); all other places use `isinstance(x, ImageData)`.
+- **Tests:** `python -m pytest`: 14 passed, 1 xfailed; the two new regression tests fail on the old code.
+- **Commits:** `a7696ae` fix(comparison): leave masked pairs out of fit_linear_regression [MI-77]
+- **Follow-ups:** none.
+
+### 2026-11-17 13:02 CET — [MI-72] Split Bland-Altman into compute and plot
+- **Status:** done
+- **Changes:**
+  - `src/mira/visualization/__init__.py`: missing comma joined "BlandAltmanResult" and "plot_surface" in
+    `__all__` (separate fix commit); now exports the split functions.
+  - `tests/test_visualization_exports.py` (new): every name in `__all__` exists.
+  - `src/mira/analysis/comparison.py`: `BlandAltmanResult` (first six fields as before, plus
+    `ci_multiplier`, `relative`, `means`, `differences`) and `bland_altman_compute()`.
+  - `src/mira/visualization/plotter_stats.py`: `plot_bland_altman(result, ...) -> Figure`; arrays as input
+    raise a `VisualizationError` that names both functions.
+  - `src/mira/visualization/bland_altman.py`: former combined call `plot_bland_altman(data_1, data_2,
+    ...) -> (fig, result)` as a wrapper (still raises `VisualizationError`).
+  - `src/mira/visualization/bland_altman_snippet.py`: re-export only.
+  - `tests/test_bland_altman.py` (new): values recorded from the former exported snippet (plain, float32,
+    relative, masked, masked + relative) reproduced to rel 1e-12; masks; ImageData-like wrapper; input
+    validation; plot to `tmp_path`; former call; package exports.
+- **Tests:** `python -m pytest`: 26 passed, 1 xfailed.
+- **Commits:** `a37b2d3` fix(visualization): separate two names in __all__ that a missing comma joined
+  [MI-72], `4d88116` refactor(analysis): split Bland-Altman into compute and plot functions [MI-72]
+- **Follow-ups:** BREAKING CHANGE: `mira.visualization.plot_bland_altman` now takes a result; old scripts
+  should import `mira.visualization.bland_altman.plot_bland_altman`. The two former modules disagreed:
+  the older `bland_altman.py` unmasked masked arrays and computed float32 input in float32 (bias
+  -0.2004574239 instead of -0.2004574128 on the test data). The split follows the exported snippet.
+
+### 2026-11-17 13:02 CET — [MI-78] Pixel-size units of the topology analysis
+- **Status:** done
+- **Changes:**
+  - `src/mira/analysis/topology.py`: `_validate_pixel_size_m` (two finite, positive values, each at most
+    `MAX_PIXEL_SIZE_M = 1e-3`) in `analyze_error_vs_topology`, `compute_gradient_magnitude` and
+    `compute_curvature`; docstrings name metres. Parameter name unchanged.
+  - `tests/test_topology_units.py` (new): gradient per metre, seven invalid inputs for all three
+    functions, valid metres accepted.
+- **Tests:** `python -m pytest`: 52 passed, 1 xfailed (after MI-73 tests were added in the same run).
+- **Commits:** `23948fc` fix(topology): reject pixel sizes that are not plausible metres [MI-78]
+- **Follow-ups:** none. Correlations were never affected by the unit (scale invariant); bin centres were.
+
+### 2026-11-17 13:02 CET — [MI-73] Processor method for the segment regression
+- **Status:** done
+- **Changes:**
+  - `src/mira/processor.py`: `StructureProcessor.fit_segment_regression(reference, offset_pixels=10,
+    include_background=True, relative=True, statistic_name="segment_regression")`; reference = x, self =
+    y; stored with `add_statistic()`; no background adjustment (documented).
+  - `tests/test_processor_regression.py` (new): slope 3 / intercept 0 on a synthetic pair, parity with the
+    analysis function, validation of unsegmented processors.
+- **Tests:** `python -m pytest`: 52 passed, 1 xfailed.
+- **Commits:** `374c734` feat(processor): add fit_segment_regression that stores its result [MI-73]
+- **Follow-ups:** MI-80 (new): with quadrant levels 1–4 on a background of 0 the default threshold
+  detection returned six corner points and an almost empty first segment; the test uses levels 11–14.
+
+### 2026-11-17 13:02 CET — [MI-76] Check the ICC implementation against a reference
+- **Status:** done (the form for the paper stays decision M10)
+- **Changes:**
+  - `src/mira/analysis/reliability.py`: p-value via `f.sf` instead of `1 - f.cdf`; NaN / inf cells and
+    masked entries raise a `ValidationError` ("complete table"); module docstring: check result, naming
+    in pingouin, full references (Shrout & Fleiss 1979, McGraw & Wong 1996, Koo & Li 2016).
+  - `tests/test_reliability_reference.py` (new): 20 random balanced tables × 3 forms against
+    `pingouin.intraclass_corr` with rounding off (ICC, CI, F, df, p); Shrout & Fleiss example (.17 / .29 /
+    .71); pingouin's wine data set; incomplete tables (NaN, inf, masked, incomplete DataFrame).
+  - `pyproject.toml`: pingouin in `dev`.
+- **Tests:** `python -m pytest`: 119 passed, 1 xfailed. Largest relative difference to pingouin 0.7.0:
+  3e-14 (lower CI bound of ICC(3,1)); pingouin implements the same Satterthwaite formula for ICC(2,1).
+- **Commits:** `91c2cd5` test(reliability): check compute_icc against pingouin and reject gaps [MI-76]
+- **Follow-ups:** the p-value change is at most 1e-15 absolute (only visible for p near 1e-15).
+
+### 2026-11-17 13:02 CET — [MI-06] README for the real package
+- **Status:** done
+- **Changes:**
+  - `README.md`: rewritten for `mira` (purpose, system role, installation with extras, real layout,
+    StructureProcessor example, compute-then-plot analyses, conventions, development).
+  - `CLAUDE.md`: architecture notes updated for MI-02, MI-05, MI-72, MI-77 and the ECC bug (separate
+    commit; status sections untouched).
+- **Tests:** the StructureProcessor example ran on synthetic data (Δn = 0.012 recovered, R² = 1.0,
+  snapshot round trip keeps `info` and `statistics`, `DeltaNResult(**dict)` works).
+- **Commits:** `f212d59` docs(readme): describe the mira package instead of image_processing [MI-06],
+  `fa0a066` docs: update CLAUDE.md for lazy imports, extras, tests and Bland-Altman
+- **Follow-ups:** none.
+
+### 2026-11-17 13:02 CET — Session summary (no phase completed)
+- **Status:** partial — phase 0 is not complete (MI-01 / MI-08 need M1, MI-02 / MI-07 need M9, MI-04 is
+  blocked); phase A done except MI-70, MI-71 (need MI-04), MI-74, MI-75 (need OffAxisHolo P15) and the
+  new MI-79 (needs M11), MI-80.
+- **Not started because they need a decision or a blocked todo:** MI-10 (M2, G2), MI-11 / MI-22 / MI-20 /
+  MI-21 (MI-10), MI-30 (M3, M4), MI-31 (definition of the shared noise number with OffAxisHolo K13, and
+  MI-75 for the spectrum), MI-40–MI-42, MI-50–MI-53 (M5, M6, M7, G4, G7), MI-60–MI-62.
+- **Tests:** `python -m pytest` on the branch: 119 passed, 1 xfailed (strict, MI-79).
+- **To check with real data:** (1) run the publication scripts against this branch — they must give the
+  same numbers; scripts that import `plot_bland_altman` from `mira.visualization` need
+  `mira.visualization.bland_altman.plot_bland_altman` instead; (2) calls of `analyze_error_vs_topology`
+  with a pixel size in µm now raise (intended); (3) whether ECC refinement was used for any published
+  result (M11).
+- **Commits:** see the entries above; bookkeeping in the following `docs(todo)` commit.
+- **Follow-ups:** PR from `feat/baseline-and-analysis-backlog` (contains `docs/project-files`) into `main`.
