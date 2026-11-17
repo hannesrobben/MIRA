@@ -58,6 +58,8 @@ dev = [
     "black",
     "yapf",
     "numpydoc",
+    # Reference implementation for the ICC check (MI-76).
+    "pingouin",
 ]
 
 [tool.setuptools]

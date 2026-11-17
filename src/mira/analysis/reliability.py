@@ -27,15 +27,28 @@ one-way/two-way ANOVA decomposition (Shrout & Fleiss, 1979; McGraw & Wong,
     this one specific, fixed set - a narrower claim than ICC(2,1), but
     with an exact (not Satterthwaite-approximated) confidence interval.
 
-CITATION CAVEAT: the formulas below are transcribed from memory against
-the cited papers, not fetched from them - they are validated numerically
-below (perfect-agreement and pure-noise sanity checks, plus a cross-check
-of the ICC(1,1) F-test against `scipy.stats.f_oneway`), but double-check
-against a reference implementation (e.g. Python's
-`pingouin.intraclass_corr` or R's `psych::ICC()`) before reporting numbers
-from this module in the paper - particularly the ICC(2,1) confidence
-interval, which relies on a Satterthwaite-type degrees-of-freedom
-approximation and is the easiest of the three to get subtly wrong.
+Reference check (MI-76): point estimate, confidence interval, F value,
+degrees of freedom and p-value of all three forms agree with
+`pingouin.intraclass_corr` (pingouin 0.7.0, which its authors validate
+against R `psych::ICC`) to a relative difference below 1e-12 on random
+balanced tables, including the Satterthwaite-approximated CI of ICC(2,1)
+(tests/test_reliability_reference.py). pingouin names the forms after
+McGraw & Wong: ICC(2,1) = "ICC(A,1)" (absolute agreement), ICC(3,1) =
+"ICC(C,1)" (consistency). The Shrout & Fleiss (1979) example table gives
+the published 0.17 / 0.29 / 0.71. Which form the paper reports is
+decision M10 (TODO.md).
+
+References
+----------
+Shrout, P. E., & Fleiss, J. L. (1979). Intraclass correlations: uses in
+assessing rater reliability. Psychological Bulletin, 86(2), 420-428.
+
+McGraw, K. O., & Wong, S. P. (1996). Forming inferences about some
+intraclass correlation coefficients. Psychological Methods, 1(1), 30-46.
+
+Koo, T. K., & Li, M. Y. (2016). A guideline of selecting and reporting
+intraclass correlation coefficients for reliability research. Journal of
+Chiropractic Medicine, 15(2), 155-163.
 """
 
 from __future__ import annotations
@@ -100,7 +113,7 @@ def interpret_icc(value: float) -> str:
     commonly cited from Koo & Li (2016) - "A Guideline of Selecting and
     Reporting Intraclass Correlation Coefficients for Reliability
     Research": <0.5 poor, 0.5-0.75 moderate, 0.75-0.9 good, >=0.9
-    excellent. See the module-level citation caveat.
+    excellent (the same bands pingouin documents).
 
     Args:
         value: An ICC point estimate.
@@ -159,11 +172,19 @@ def compute_icc(
     Compute an intraclass correlation coefficient from a complete
     (subjects x raters) measurement table.
 
+    The formulas follow Shrout & Fleiss (1979) and McGraw & Wong (1996)
+    and are checked against `pingouin.intraclass_corr` (see the module
+    docstring). The confidence bounds are clipped to [-1, 1]; otherwise
+    they are the unclipped textbook bounds.
+
     Args:
         data:      2D array, shape (n_subjects, n_raters). Every subject
                   must have been measured by every rater (a complete,
                   balanced design) - there is no accepted way to handle
-                  missing cells with these closed-form formulas.
+                  missing cells with these closed-form formulas. Missing
+                  cells (NaN, inf, or masked entries of a masked array)
+                  are rejected, never filled; drop incomplete subjects or
+                  raters before calling.
         icc_type:   One of "ICC(1,1)", "ICC(2,1)", "ICC(3,1)" - see the
                   module docstring for which to use.
         alpha:      Significance level for the confidence interval (0.05
@@ -174,11 +195,21 @@ def compute_icc(
 
     Raises:
         ValidationError: If `data` isn't 2D, has fewer than 2 subjects or
-            raters, or `icc_type` is unsupported.
+            raters, contains missing (non-finite or masked) cells, or
+            `icc_type` is unsupported.
         ProcessingError: If the underlying computation fails (e.g. the
             ICC(2,1) Satterthwaite degrees-of-freedom approximation
             produces a non-finite value).
     """
+    if isinstance(data, np.ma.MaskedArray):
+        n_masked = int(np.ma.count_masked(data))
+        if n_masked:
+            raise ValidationError(
+                f"data has {n_masked} masked cells. ICC requires a complete "
+                f"(subjects x raters) table; drop incomplete subjects/raters "
+                f"first."
+            )
+        data = data.data
     data = np.asarray(data, dtype=float)
     if data.ndim != 2:
         raise ValidationError(
@@ -196,6 +227,13 @@ def compute_icc(
         )
     if not (0 < alpha < 1):
         raise ValidationError(f"alpha must be in (0, 1), got {alpha}.")
+    n_missing = int(np.sum(~np.isfinite(data)))
+    if n_missing:
+        raise ValidationError(
+            f"data has {n_missing} non-finite cells (NaN/inf). ICC requires a "
+            f"complete (subjects x raters) table; drop incomplete "
+            f"subjects/raters first."
+        )
 
     t = _anova_table(data)
     ms_r, ms_c, ms_e, ms_w = t["ms_subjects"], t["ms_raters"], t["ms_error"], t["ms_within"]
@@ -228,8 +266,8 @@ def compute_icc(
             f_value = ms_r / ms_e
             df1, df2 = t["df_subjects"], t["df_error"]
 
-            # Satterthwaite-approximated CI (McGraw & Wong, 1996) - see the
-            # module-level citation caveat.
+            # Satterthwaite-approximated CI (McGraw & Wong, 1996), checked
+            # against pingouin (module docstring).
             f_j = ms_c / ms_e
             a = k * icc * f_j + (n * (1 + (k - 1) * icc) - k * icc)
             b = (k - 1) * (n - 1)
@@ -253,7 +291,9 @@ def compute_icc(
                 f"check for zero variance in the input data."
             )
 
-        p_value = float(1 - scipy_stats.f.cdf(f_value, df1, df2))
+        # Survival function instead of 1 - cdf: keeps precision for very
+        # small p-values (1 - cdf differed from pingouin by up to 1e-15).
+        p_value = float(scipy_stats.f.sf(f_value, df1, df2))
 
         return ICCResult(
             icc_type=icc_type,
