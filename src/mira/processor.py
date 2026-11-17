@@ -1488,23 +1488,23 @@ class StructureProcessor:
                 **kwargs,
             )
 
-            # Korrektur zurück in den aktiven Rohkanal propagieren - sonst bleiben
-            # processor.data / processor.phase_data / processor.height_data (und
-            # damit Plots, save_data(), ...) auf den unkorrigierten Werten stehen.
-            # Spiegelt das Muster aus adjust_background().
+            # Propagate the correction back into the active raw channel. Otherwise
+            # processor.data / processor.phase_data / processor.height_data (and
+            # with them plots, save_data(), ...) keep the uncorrected values.
+            # Mirrors the pattern of adjust_background().
             corrected = self.structure.data.data
 
             if convert_to_height:
-                # Repräsentation wechselt von Phase zu Höhe.
+                # The representation changes from phase to height.
                 if self.height_data is not None:
                     self.height_data.update_data(data=corrected)
                 else:
                     self.height_data = ImageData(
                         data=corrected, pixel_size=self.structure.pixel_size
                     )
-                # phase_data passt nicht mehr zur korrigierten (Höhen-)Struktur -
-                # verwerfen, damit _active_data nicht stillschweigend auf die
-                # veraltete Phase zurückfällt.
+                # phase_data no longer matches the corrected (height) structure.
+                # Discard it so that _active_data does not silently fall back to
+                # the outdated phase.
                 self.phase_data = None
             else:
                 self._active_data.update_data(data=corrected)
