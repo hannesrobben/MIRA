@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import numpy as np
 import numpy.ma as ma
-import cv2
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple, List, Optional, Dict, Union, Any
@@ -428,6 +427,8 @@ class Structure:
 
         # cv2 rotates around a (x, y) = (col, row) center point
         cx, cy = float(self.center[1]), float(self.center[0])  # col, row
+
+        import cv2
 
         # Step 1: rotate around structure center to de-rotate
         M_rot = cv2.getRotationMatrix2D(center=(cx, cy), angle=angle_deg, scale=1.0)

@@ -8,7 +8,6 @@ It handles loading, validation, and basic manipulation of image data.
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 from pathlib import Path
 from typing import Tuple, Union, Literal, Optional
 from dataclasses import dataclass, field
@@ -159,6 +158,8 @@ class ImageData:
 
             # Handle different file types
             if file_path.suffix.lower() == ".csv":
+                import pandas as pd
+
                 data = pd.read_csv(file_path, delimiter=";").to_numpy()
             elif file_path.suffix.lower() == ".npy":
                 data = np.load(file_path)
@@ -437,6 +438,8 @@ class ImageData:
         if format.lower() == "npy":
             np.save(file_path, self.data)
         elif format.lower() == "csv":
+            import pandas as pd
+
             pd.DataFrame(self.data).to_csv(file_path, sep=";", index=False)
         elif format.lower() == "txt":
             np.savetxt(file_path, self.data)

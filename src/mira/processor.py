@@ -11,12 +11,9 @@ import json
 import logging
 from pathlib import Path
 from sqlite3 import DataError
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import patches
 from numpy import ma
 from scipy.ndimage import binary_dilation
 from scipy.ndimage import shift as nd_shift
@@ -53,7 +50,15 @@ from .processing.calibration import (
     calculate_delta_n as fit_delta_n,
 )
 from .utils.helpers import get_logger
-from .visualization.visualization_debug import plot_structure_properties
+
+if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
+
+# OpenCV and matplotlib are imported where they are used, so that
+# `import mira` loads neither of them (MI-05). This constant mirrors
+# cv2.INTER_LINEAR for the default argument of apply_affine_transform;
+# tests/test_import_hygiene.py checks that both values agree.
+_CV2_INTER_LINEAR = 1
 
 
 class StructureProcessor:
@@ -219,6 +224,7 @@ class StructureProcessor:
 
     def debug(self):
         import matplotlib.pyplot as plt
+        from matplotlib import patches
 
         self.detect_structure(threshold_method="percentile", percentile=20)
         plt.imshow(self.structure.mask)
@@ -547,7 +553,7 @@ class StructureProcessor:
         matrix: np.ndarray,
         output_shape: tuple[int, int] | None = None,
         *,
-        data_interpolation: int = cv2.INTER_LINEAR,
+        data_interpolation: int = _CV2_INTER_LINEAR,
         border_value: float | None = None,
         validate: bool = True,
     ) -> StructureProcessor:
@@ -594,6 +600,8 @@ class StructureProcessor:
                 matrix has an unsupported shape.
             ProcessingError: If the post-transform consistency check fails.
         """
+        import cv2
+
         matrix = np.asarray(matrix, dtype=np.float64)
         if matrix.shape == (3, 3):
             matrix = matrix[:2, :]
@@ -1572,6 +1580,8 @@ class StructureProcessor:
             raise ProcessingError(f"Background adjustment failed: {e!s}")
 
     def plot_height(self):
+        import matplotlib.pyplot as plt
+
         if self.height_data is not None:
             plt.imshow(self.height_data.data.data)
         else:
@@ -1905,6 +1915,8 @@ class StructureProcessor:
             raise ProcessingError(f"Height map plotting failed: {e!s}")
 
     def plot_debug(self, suptitle=None, save_path=None):
+        from .visualization.visualization_debug import plot_structure_properties
+
         if self.structure is None:
             self.detect_structure()
         plot_structure_properties(
