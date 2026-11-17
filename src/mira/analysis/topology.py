@@ -78,6 +78,40 @@ def _extract_array(value):
     return value.data if hasattr(value, "data") else value
 
 
+# Largest pixel size accepted, in metres. 1 mm per pixel is far beyond any
+# microscope image; a value above it almost certainly is a pixel size in µm
+# (e.g. 0.5 instead of 0.5e-6), which would silently scale gradient and
+# curvature by 1e-6 and 1e-12.
+MAX_PIXEL_SIZE_M = 1e-3
+
+
+def _validate_pixel_size_m(pixel_size) -> tuple[float, float]:
+    """
+    Check that `pixel_size` is a (dy, dx) pair in metres.
+
+    Raises:
+        ValidationError: If it is not two finite, positive numbers, or if a
+            value exceeds MAX_PIXEL_SIZE_M (most likely given in µm).
+    """
+    try:
+        dy, dx = (float(v) for v in pixel_size)
+    except (TypeError, ValueError) as e:
+        raise ValidationError(
+            f"pixel_size must be a (dy, dx) pair in metres, got {pixel_size!r}."
+        ) from e
+    if not (np.isfinite(dy) and np.isfinite(dx) and dy > 0 and dx > 0):
+        raise ValidationError(
+            f"pixel_size must be finite and positive (metres), got {pixel_size!r}."
+        )
+    if dy > MAX_PIXEL_SIZE_M or dx > MAX_PIXEL_SIZE_M:
+        raise ValidationError(
+            f"pixel_size {pixel_size!r} is larger than {MAX_PIXEL_SIZE_M} m per "
+            f"pixel. The topology analysis expects metres; a pixel size in µm "
+            f"must be multiplied by 1e-6."
+        )
+    return dy, dx
+
+
 def _raw(arr) -> np.ndarray:
     """Underlying plain ndarray of a possibly-masked array."""
     return arr.data if isinstance(arr, ma.MaskedArray) else np.asarray(arr)
@@ -90,13 +124,17 @@ def compute_gradient_magnitude(data, pixel_size: tuple[float, float]) -> np.ndar
     Args:
         data:        2D height/phase array (ImageData-like, ndarray, or
                      masked array).
-        pixel_size:  (dy, dx) physical pixel size in meters.
+        pixel_size:  (dy, dx) physical pixel size in metres (not µm;
+                     validated, see MAX_PIXEL_SIZE_M).
 
     Returns:
         2D array of gradient magnitudes, same shape as `data`.
+
+    Raises:
+        ValidationError: If `pixel_size` is not a plausible size in metres.
     """
+    dy, dx = _validate_pixel_size_m(pixel_size)
     raw = _raw(_extract_array(data))
-    dy, dx = pixel_size
     grad_y, grad_x = np.gradient(raw, dy, dx)
     return np.sqrt(grad_x**2 + grad_y**2)
 
@@ -109,13 +147,17 @@ def compute_curvature(data, pixel_size: tuple[float, float]) -> np.ndarray:
     Args:
         data:        2D height/phase array (ImageData-like, ndarray, or
                      masked array).
-        pixel_size:  (dy, dx) physical pixel size in meters.
+        pixel_size:  (dy, dx) physical pixel size in metres (not µm;
+                     validated, see MAX_PIXEL_SIZE_M).
 
     Returns:
         2D array of curvature values, same shape as `data`.
+
+    Raises:
+        ValidationError: If `pixel_size` is not a plausible size in metres.
     """
+    dy, dx = _validate_pixel_size_m(pixel_size)
     raw = _raw(_extract_array(data))
-    dy, dx = pixel_size
     grad_y, grad_x = np.gradient(raw, dy, dx)
     _, d2x = np.gradient(grad_x, dy, dx)
     d2y, _ = np.gradient(grad_y, dy, dx)
@@ -167,7 +209,11 @@ def analyze_error_vs_topology(
                       tested against (e.g. the measured/reference height)
                       - gradient and curvature are computed on this, not
                       on the error map itself.
-        pixel_size:    (dy, dx) physical pixel size in meters.
+        pixel_size:    (dy, dx) physical pixel size in metres, not µm.
+                      Gradient and curvature (and the bin centres of the
+                      result) are per metre and per metre^2. A value above
+                      MAX_PIXEL_SIZE_M raises, because it almost certainly
+                      is a size in µm.
         n_bins:        Number of bins for the mean-error-per-gradient/
                       curvature summary.
 
@@ -175,9 +221,11 @@ def analyze_error_vs_topology(
         ErrorTopologyResult.
 
     Raises:
-        ValidationError: If `error`/`reference` shapes don't match, or
-            fewer than 2 valid pixels remain.
+        ValidationError: If `error`/`reference` shapes don't match,
+            `pixel_size` is not a plausible size in metres, or fewer than
+            2 valid pixels remain.
     """
+    _validate_pixel_size_m(pixel_size)
     error_arr = _extract_array(error)
     ref_arr = _extract_array(reference)
 
