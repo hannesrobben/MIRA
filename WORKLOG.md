@@ -206,3 +206,18 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
   result (M11).
 - **Commits:** see the entries above; bookkeeping in the following `docs(todo)` commit.
 - **Follow-ups:** PR from `feat/baseline-and-analysis-backlog` (contains `docs/project-files`) into `main`.
+
+### 2026-11-17 15:56 CET — [MI-81] Translate the remaining German documentation in active code
+- **Status:** done
+- **Changes:**
+  - `src/mira/core/image.py`: `ImageData.save_compressed` docstring translated and converted to NumPy
+    style; inline comments translated.
+  - `src/mira/processor.py`: comments in `phase_retrieval` translated.
+  - `TODO.md`: MI-81 added directly to Done.
+- **Tests:** `python -m pytest`: 119 passed, 1 xfailed (strict, MI-79), unchanged.
+- **Commits:** `076c6af` docs(core): translate German docstring and comments to English [MI-81];
+  bookkeeping in the following `docs(todo)` commit.
+- **Follow-ups:** German that stays on purpose: `docs/notes/*.txt` (session notes, translated when turned
+  into documentation), the legacy copies, the cited German title in `docs/system/SOFTWARE_PLAN_OVERVIEW.md`.
+  The cross-repository overview of this session lives outside the repository in
+  `../_system/` (ERRORS.md, DUPLICATE_CODE.md, DECISIONS.md, …).
