@@ -13,7 +13,7 @@ from __future__ import annotations
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..analysis.comparison import RegressionResult
+from ..analysis.comparison import BlandAltmanResult, RegressionResult
 from ..analysis.sensitivity import SensitivityResult
 from ..analysis.topology import ErrorTopologyResult
 from ..analysis.reliability import ICCResult
@@ -406,3 +406,125 @@ def plot_icc_summary(
         if isinstance(e, VisualizationError):
             raise
         raise VisualizationError(f"Failed to plot ICC summary: {e!s}")
+
+
+def plot_bland_altman(
+    result: BlandAltmanResult,
+    label_1: str = "Method 1",
+    label_2: str = "Method 2",
+    units: str = "µm",
+    title: str = "Bland-Altman Plot",
+    fontsize: int = 18,
+    point_size: float = 8.0,
+    point_alpha: float = 0.35,
+    ax: plt.Axes | None = None,
+    dpi: int = 300,
+    save_path: str | None = None,
+) -> plt.Figure:
+    """
+    Plot a Bland-Altman result: pair differences against pair means, with
+    the bias and the limits of agreement as horizontal lines.
+
+    Parameters
+    ----------
+    result : BlandAltmanResult
+        Result of `mira.analysis.comparison.bland_altman_compute`.
+    label_1, label_2 : str, optional
+        Names of the two measurements for the axis labels.
+    units : str, optional
+        Unit of the measurements for the axis labels. The y axis shows "%"
+        if `result.relative` is True.
+    title : str, optional
+        Plot title.
+    fontsize : int, optional
+        Base font size; axis and tick labels are derived from it.
+    point_size : float, optional
+        Marker size of the scatter cloud.
+    point_alpha : float, optional
+        Marker transparency; keep it low for dense data.
+    ax : matplotlib.axes.Axes, optional
+        Existing axes to draw on; a new figure is created if None.
+    dpi : int, optional
+        Resolution of a new figure and of the saved file.
+    save_path : str, optional
+        If given, the figure is saved to this path.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+
+    Raises
+    ------
+    VisualizationError
+        If `result` is not a BlandAltmanResult with point data, or plotting
+        fails.
+    """
+    if not isinstance(result, BlandAltmanResult):
+        raise VisualizationError(
+            "plot_bland_altman expects the BlandAltmanResult of "
+            "mira.analysis.comparison.bland_altman_compute(data_1, data_2). "
+            "The former combined function (data in, figure and result out) is "
+            "mira.visualization.bland_altman.plot_bland_altman."
+        )
+    if result.means is None or result.differences is None:
+        raise VisualizationError(
+            "BlandAltmanResult has no point data (means / differences); "
+            "compute it with bland_altman_compute()."
+        )
+    try:
+        if ax is None:
+            fig, ax = plt.subplots(figsize=(9, 6), dpi=dpi)
+        else:
+            fig = ax.figure
+
+        ax.scatter(
+            result.means,
+            result.differences,
+            s=point_size,
+            alpha=point_alpha,
+            color="steelblue",
+            edgecolors="none",
+            rasterized=True,  # keeps vector output (PDF) small for large clouds
+        )
+        k = result.ci_multiplier
+        ax.axhline(
+            result.bias,
+            color="black",
+            linestyle="-",
+            linewidth=1.5,
+            label=f"Bias = {result.bias:.3g}",
+        )
+        ax.axhline(
+            result.loa_upper,
+            color="firebrick",
+            linestyle="--",
+            linewidth=1.5,
+            label=f"+{k:g} SD = {result.loa_upper:.3g}",
+        )
+        ax.axhline(
+            result.loa_lower,
+            color="firebrick",
+            linestyle="--",
+            linewidth=1.5,
+            label=f"-{k:g} SD = {result.loa_lower:.3g}",
+        )
+        ax.axhline(0, color="gray", linestyle=":", linewidth=1.0, alpha=0.6)
+
+        diff_unit = "%" if result.relative else units
+        ax.set_xlabel(
+            f"Mean of {label_1} and {label_2} [{units}]", fontsize=fontsize - 2
+        )
+        ax.set_ylabel(f"{label_1} - {label_2} [{diff_unit}]", fontsize=fontsize - 2)
+        ax.set_title(title, fontsize=fontsize)
+        ax.tick_params(axis="both", labelsize=fontsize - 4)
+        ax.legend(loc="best", fontsize=fontsize - 6, framealpha=0.9)
+        ax.grid(True, alpha=0.3, linestyle=":")
+        fig.tight_layout()
+
+        if save_path:
+            fig.savefig(save_path, dpi=dpi, bbox_inches="tight", facecolor="white")
+
+        return fig
+
+    except Exception as e:
+        raise VisualizationError(f"Failed to plot Bland-Altman comparison: {e!s}")

@@ -5,7 +5,8 @@ This module provides functionality for visualizing image data,
 structures, and analysis results in both 2D and 3D formats.
 """
 
-from .bland_altman_snippet import BlandAltmanResult, plot_bland_altman
+from ..analysis.comparison import BlandAltmanResult
+from .plotter_stats import plot_bland_altman
 from .plotter_2d import (
     DualProfileResult,
     create_masked_overlay,
