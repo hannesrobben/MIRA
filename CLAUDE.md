@@ -26,13 +26,13 @@ Project files:
 ## Commands
 
 ```bash
-python -m pip install -e ".[dev]"   # editable install (pytest, black, numpydoc)
-python -m pytest                    # tests in tests/ (pythonpath = src); the suite is being rebuilt (MI-04)
+python -m pip install -e ".[dev]"   # editable install with extras viz, analysis + pytest, black, numpydoc, pingouin
+python -m pytest                    # tests in tests/ (pythonpath = src); headless, Agg backend
 black src tests                     # formatting (line length 88)
 ```
 
-- pytest configuration is in `pyproject.toml` (`testpaths = ["tests"]`, `pythonpath = ["src"]`). Today `tests/_test/test_dhm.py` is empty; the test suite of the DOE work lives elsewhere (MI-04).
-- `pyproject.toml` declares the dependencies statically **and** dynamically from a `requirements.txt` that does not exist, and has a placeholder author (MI-02).
+- pytest configuration is in `pyproject.toml` (`testpaths = ["tests"]`, `pythonpath = ["src"]`); `tests/conftest.py` sets the Agg backend. The tests cover import hygiene, processor smoke paths, Bland-Altman, masked inputs, topology units, the segment regression and the ICC check against pingouin (skipped without pingouin). The test suite of the DOE work and its regression on stored snapshots are still missing (MI-04); `tests/_test/test_dhm.py` is empty.
+- `pyproject.toml`: core dependencies (numpy, scipy, opencv-python>=4.10.0.84, scikit-image, scikit-learn) and extras `viz` (matplotlib), `analysis` (pandas), `dev`. `requires-python` is still `>=3.10` until decision M9.
 - A local `.venv` (Python 3.12.3) exists inside the folder (gitignored).
 
 ## Architecture
@@ -41,12 +41,13 @@ black src tests                     # formatting (line length 88)
 - `core/`: `ImageData` (data, pixel size, profiles, resize, padding), `Structure` (mask, bounds, corners, `info` dict with ids via `set_info`, `statistics` dict via `add_statistic`), `Segment`, `Background` (incl. `erode_by_pixels`).
 - `processing/`: `detection.py`, `segmentation.py` (`segment_structure`, the implementation the processor uses; `Structure.segment()` is a duplicate, MI-71), `alignment.py`, `registration.py` (`RegistrationRefiner`, `NoRefinement`, `ECCRefinement`, `PhaseCorrelationRefinement`, `get_refiner`), `phase_retrieval.py` (phase ↔ height, unwrapping, background adjustment), `calibration.py` (`calculate_delta_n` → `DeltaNResult`, method registry, currently `"segment_mean"`).
 - `analysis/` (computation only): `segment_data.py` (shared segment statistics with edge erosion and background-relative values), `comparison.py` (`fit_linear_regression`, `fit_segment_regression` → `RegressionResult`), `ensemble.py` (records and pandas DataFrames over prints, `summarize_by_group`), `reliability.py` (`compute_icc`, ICC(1,1), ICC(2,1), ICC(3,1) with CI and F-test; `interpret_icc`), `sensitivity.py` (Δn uncertainty propagation and sweep), `topology.py` (error vs. gradient and curvature; expects pixel size in metres).
-- `visualization/` (plotting only): `plotter_2d.py`, `plotter_3d.py`, `plotter_stats.py`, `bland_altman.py` and `bland_altman_snippet.py` (compute and plot still combined, MI-72), `visualization_debug.py`.
+- `visualization/` (plotting only): `plotter_2d.py`, `plotter_3d.py`, `plotter_stats.py`, `bland_altman.py` (former combined call as a wrapper around `analysis.comparison.bland_altman_compute` and `plotter_stats.plot_bland_altman`), `bland_altman_snippet.py` (re-export, attic candidate), `visualization_debug.py`.
 - `utils/`: `exceptions.py` (`DataLoadError`, `ValidationError`, `ProcessingError`, `StructureError`, `SegmentationError`, `AlignmentError`, …), `helpers.py` (logger, conversions, geometry helpers), `serialization.py` (`to_json_safe`).
 - `MIRA_composition.py`: an unused sketch of a future data model (`ImageData` / `Structure` / `Measurement` / `Processor`).
 - Legacy copies, not the active path: `*_old.py`, `*_old<n>.py`, `processor_old^1.py`, and the Seafile conflict copy `visualization/plotter_2d (SFConflict … 2026-10-06-15-55-59).py`. They are committed (`254b25e`) and move to `attic/` only after the maintainer approves the list (MI-01).
-- Import weight: `import mira` imports `processor.py`, which imports OpenCV and matplotlib at module level (MI-05 changes this).
-- Known pitfall (fixed in two places, MI-77 audits the rest): `x.data if hasattr(x, "data") else x` unmasks a `numpy.ma.MaskedArray`; check for ndarray / MaskedArray first and use `.data` only for wrapper objects such as `ImageData`.
+- Import weight: `import mira` loads neither OpenCV, matplotlib nor pandas (MI-05, checked by `tests/test_import_hygiene.py`). Import them inside the function that uses them; `processor._CV2_INTER_LINEAR` mirrors `cv2.INTER_LINEAR` for a default argument.
+- Known pitfall (audited in MI-77): `x.data if hasattr(x, "data") else x`, and `np.asarray`, unmask a `numpy.ma.MaskedArray`; check for ndarray / MaskedArray first and use `.data` only for wrapper objects such as `ImageData`.
+- Known bug (MI-79): `ECCRefinement` returns the inverse warp; `PhaseCorrelationRefinement` is correct. The fix waits for the maintainer.
 - Known limitation: after `load_snapshot`, `structure.statistics` holds plain JSON dicts, not the original dataclasses (rebuild explicitly, e.g. `DeltaNResult(**d)`).
 
 ## System context
