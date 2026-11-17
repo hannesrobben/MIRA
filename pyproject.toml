@@ -5,13 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "mira"
 version = "0.1.0"
-description = "MIRA - Microscopy Image Registration & Analysis"
+description = "MIRA - Microscopy Image Registration & Analysis: structure detection, segmentation, alignment and statistics of phase and height images of printed micro-structures"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
 
 authors = [
-    { name = "Your Name" }
+    { name = "Hannes Robben" }
 ]
 
 keywords = [
@@ -31,27 +31,36 @@ classifiers = [
     "Operating System :: OS Independent"
 ]
 
+# Core: everything `import mira` and the processing / analysis computations
+# need. OpenCV >= 4.10.0.84 is the first build that works with NumPy 2.
+# The Python / NumPy baseline itself is decision M9 (TODO.md).
 dependencies = [
     "numpy",
     "scipy",
-    "matplotlib",
-    "opencv-python",
+    "opencv-python>=4.10.0.84",
     "scikit-image",
     "scikit-learn",
-    "pandas",
-    "pillow"
 ]
 
 [project.optional-dependencies]
+# Plotting (mira.visualization and the plot_* methods of StructureProcessor).
+viz = [
+    "matplotlib",
+]
+# Tables over prints: analysis.ensemble, compute_icc_from_dataframe, and
+# reading / writing CSV files with ImageData.
+analysis = [
+    "pandas",
+]
 dev = [
+    "mira[viz,analysis]",
     "pytest",
     "black",
     "yapf",
     "numpydoc",
+    # Reference implementation for the ICC check (MI-76).
+    "pingouin",
 ]
-
-[tool.setuptools.dynamic]
-dependencies = { file = ["requirements.txt"] }
 
 [tool.setuptools]
 package-dir = { "" = "src" }

@@ -11,12 +11,9 @@ import json
 import logging
 from pathlib import Path
 from sqlite3 import DataError
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
-import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib import patches
 from numpy import ma
 from scipy.ndimage import binary_dilation
 from scipy.ndimage import shift as nd_shift
@@ -52,8 +49,17 @@ from .processing.calibration import (
     DeltaNResult,
     calculate_delta_n as fit_delta_n,
 )
+from .analysis.comparison import RegressionResult, fit_segment_regression
 from .utils.helpers import get_logger
-from .visualization.visualization_debug import plot_structure_properties
+
+if TYPE_CHECKING:
+    import matplotlib.pyplot as plt
+
+# OpenCV and matplotlib are imported where they are used, so that
+# `import mira` loads neither of them (MI-05). This constant mirrors
+# cv2.INTER_LINEAR for the default argument of apply_affine_transform;
+# tests/test_import_hygiene.py checks that both values agree.
+_CV2_INTER_LINEAR = 1
 
 
 class StructureProcessor:
@@ -219,6 +225,7 @@ class StructureProcessor:
 
     def debug(self):
         import matplotlib.pyplot as plt
+        from matplotlib import patches
 
         self.detect_structure(threshold_method="percentile", percentile=20)
         plt.imshow(self.structure.mask)
@@ -547,7 +554,7 @@ class StructureProcessor:
         matrix: np.ndarray,
         output_shape: tuple[int, int] | None = None,
         *,
-        data_interpolation: int = cv2.INTER_LINEAR,
+        data_interpolation: int = _CV2_INTER_LINEAR,
         border_value: float | None = None,
         validate: bool = True,
     ) -> StructureProcessor:
@@ -594,6 +601,8 @@ class StructureProcessor:
                 matrix has an unsupported shape.
             ProcessingError: If the post-transform consistency check fails.
         """
+        import cv2
+
         matrix = np.asarray(matrix, dtype=np.float64)
         if matrix.shape == (3, 3):
             matrix = matrix[:2, :]
@@ -1315,6 +1324,87 @@ class StructureProcessor:
                 raise
             raise ProcessingError(f"delta_n fitting failed: {e!s}")
 
+    def fit_segment_regression(
+        self,
+        reference: "StructureProcessor",
+        offset_pixels: int = 10,
+        include_background: bool = True,
+        relative: bool = True,
+        statistic_name: str = "segment_regression",
+    ) -> RegressionResult:
+        """
+        Fit a linear regression of this processor's segment means against
+        those of `reference`, and store it in `structure.statistics`.
+
+        Wraps `mira.analysis.comparison.fit_segment_regression` the way
+        `calculate_delta_n` wraps the delta_n fit: `reference` provides the
+        x values (independent variable, e.g. a Sensofar or LSM height),
+        this processor the y values (e.g. the in-situ DHM channel). Each
+        segment (and optionally the background) is one data point. The
+        active channel of each processor is used as it is; unlike
+        `calculate_delta_n`, no background adjustment is applied, because
+        `relative=True` already uses background-relative means.
+
+        Parameters
+        ----------
+        reference : StructureProcessor
+            Processor segmented identically to this one (same number of
+            segments in the same layout).
+        offset_pixels : int, optional
+            Pixels excluded from every segment and background edge.
+        include_background : bool, optional
+            If True, the background is an additional data point.
+        relative : bool, optional
+            If True, use background-relative segment means.
+        statistic_name : str, optional
+            Key under which the result is stored with
+            `Structure.add_statistic`; an existing entry is overwritten.
+
+        Returns
+        -------
+        RegressionResult
+            Slope, intercept, R^2 and the points used.
+
+        Raises
+        ------
+        ValidationError
+            If either processor is not segmented or the segment counts
+            differ.
+        ProcessingError
+            If the fit itself fails.
+        """
+        try:
+            if self.structure is None or not self.structure.segments:
+                raise ValidationError(
+                    "self must be segmented (segment_structure()) before "
+                    "fitting the segment regression."
+                )
+            if reference.structure is None or not reference.structure.segments:
+                raise ValidationError(
+                    "reference must be segmented (segment_structure()) before "
+                    "fitting the segment regression."
+                )
+
+            result = fit_segment_regression(
+                structure_x=reference.structure,
+                structure_y=self.structure,
+                offset_pixels=offset_pixels,
+                include_background=include_background,
+                relative=relative,
+            )
+            self.structure.add_statistic(statistic_name, result)
+            self.logger.info(
+                f"Segment regression '{statistic_name}': slope = "
+                f"{result.slope:.6g}, intercept = {result.intercept:.6g}, "
+                f"R^2 = {result.r_squared:.4f}, n = {result.n_points}"
+            )
+            return result
+
+        except Exception as e:
+            if isinstance(e, (ValidationError, ProcessingError)):
+                raise
+            raise ProcessingError(f"Segment regression failed: {e!s}")
+
     # todo - is this really necessary?
     #   structure data is not the right approach to do ?!
     def unwrap_phase(
@@ -1572,6 +1662,8 @@ class StructureProcessor:
             raise ProcessingError(f"Background adjustment failed: {e!s}")
 
     def plot_height(self):
+        import matplotlib.pyplot as plt
+
         if self.height_data is not None:
             plt.imshow(self.height_data.data.data)
         else:
@@ -1905,6 +1997,8 @@ class StructureProcessor:
             raise ProcessingError(f"Height map plotting failed: {e!s}")
 
     def plot_debug(self, suptitle=None, save_path=None):
+        from .visualization.visualization_debug import plot_structure_properties
+
         if self.structure is None:
             self.detect_structure()
         plot_structure_properties(

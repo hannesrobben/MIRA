@@ -11,7 +11,6 @@ import numpy.ma as ma
 
 from typing import TYPE_CHECKING, Dict, List, Literal, Tuple, Optional, Union
 
-import cv2
 
 
 from ..core.structure import Structure, Segment
@@ -854,6 +853,8 @@ def _build_alignment_matrix(
 
     All centers are (row, col); cv2 uses (col, row).
     """
+    import cv2
+
     cx, cy = float(structure_center[1]), float(structure_center[0])
 
     R = cv2.getRotationMatrix2D(center=(cx, cy), angle=angle, scale=1.0)

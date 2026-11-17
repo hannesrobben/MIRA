@@ -23,7 +23,6 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Union
 
-import cv2
 import numpy as np
 
 from ..utils.exceptions import AlignmentError
@@ -46,6 +45,8 @@ def _normalize(image: np.ndarray, blur_sigma: float = 1.0) -> np.ndarray:
         hi = lo + 1e-6
     img = np.clip((img - lo) / (hi - lo), 0.0, 1.0)
     if blur_sigma and blur_sigma > 0:
+        import cv2
+
         ksize = int(2 * round(3 * blur_sigma) + 1)
         img = cv2.GaussianBlur(img, (ksize, ksize), blur_sigma)
     return img
@@ -85,10 +86,12 @@ class ECCRefinement(RegistrationRefiner):
     already trusted, or ``affine`` for residual shear/scale.
     """
 
+    # Names of the cv2 motion constants; resolved in estimate() so that
+    # importing this module does not import OpenCV (MI-05).
     _MOTION = {
-        "translation": cv2.MOTION_TRANSLATION,
-        "euclidean": cv2.MOTION_EUCLIDEAN,
-        "affine": cv2.MOTION_AFFINE,
+        "translation": "MOTION_TRANSLATION",
+        "euclidean": "MOTION_EUCLIDEAN",
+        "affine": "MOTION_AFFINE",
     }
 
     def __init__(
@@ -109,6 +112,8 @@ class ECCRefinement(RegistrationRefiner):
         self.blur_sigma = float(blur_sigma)
 
     def estimate(self, moving: np.ndarray, fixed: np.ndarray) -> np.ndarray:
+        import cv2
+
         fixed_n = _normalize(fixed, self.blur_sigma)
         moving_n = _normalize(moving, self.blur_sigma)
 
@@ -121,7 +126,13 @@ class ECCRefinement(RegistrationRefiner):
         try:
             # template = fixed, input = moving -> warp maps moving onto fixed.
             _, warp = cv2.findTransformECC(
-                fixed_n, moving_n, warp, self._MOTION[self.motion], criteria, None, 5
+                fixed_n,
+                moving_n,
+                warp,
+                getattr(cv2, self._MOTION[self.motion]),
+                criteria,
+                None,
+                5,
             )
         except cv2.error as exc:
             # ECC did not converge (e.g. too little overlap). Fall back to the

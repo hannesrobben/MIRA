@@ -1,252 +1,150 @@
-# Image Processing Library Documentation
+# MIRA — Microscopy Image Registration & Analysis
 
-## Overview
+`mira` relates measured phase and height images of two-photon-printed micro-structures to place and to
+their design. Today it is the analysis library behind the DOE publication work: structure detection,
+segmentation, alignment, phase ↔ height conversion, refractive-index (Δn) calibration and statistics
+(regression, Bland-Altman, ensembles over prints, ICC, sensitivity, error vs. topology), with plotting kept
+separate from computation.
 
-This library provides a comprehensive framework for processing, analyzing, and visualizing image data, with a focus on holographic microscopy and phase/height data. It enables structure detection, segmentation, alignment, phase retrieval, and visualization through a clean, consistent API.
+In the real-time feedback 2PP system it takes over four more tasks (planned, see `TODO.md`):
 
-## Library Structure
+1. **Registration** of DHM products by stage position, refined in the image.
+2. **Speckle fusion** of captures of one structure at shifted positions.
+3. **Stitching** of a raster of products into a mosaic larger than the field of view.
+4. **Target comparison** of a product with the target structure, returned as a `DeviationReport`.
+
+Hologram reconstruction, hardware, network and stage control are out of scope.
+
+## Place in the system
+
+MIRA is one of four cooperating repositories (plan: `docs/system/SOFTWARE_PLAN_OVERVIEW.md`):
+
+| Package | Owns |
+|---|---|
+| `offaxisholo` | Hologram reconstruction → phase, intensity, complex field. |
+| `dhmconnect` | DHM protocol and service; calls MIRA's fusion / stitching plug-in on the DHM-PC. |
+| `nanofactorysystem` | Orchestration and layer targets; calls MIRA's comparison and stores the report. |
+| `mira` | Registration, fusion, stitching, target comparison, statistical analysis. |
+
+`mira` never imports `dhmconnect` or `nanofactorysystem`, and `offaxisholo` only optionally; its test suite
+runs without the other three packages.
+
+## Installation
+
+Python 3.10 or newer (the project baseline is open decision M9; development uses 3.12 and NumPy 2).
+
+```bash
+python -m pip install -e .               # core: computation without plotting and pandas
+python -m pip install -e ".[viz]"        # + matplotlib (mira.visualization, plot_* methods)
+python -m pip install -e ".[analysis]"   # + pandas (ensemble tables, ICC from a DataFrame, CSV files)
+python -m pip install -e ".[dev]"        # everything above + pytest, black, numpydoc, pingouin
+```
+
+`import mira` loads neither matplotlib, OpenCV nor pandas; they are imported when a function needs them.
+
+## Package layout
 
 ```
-image_processing/
-│
-├── core/
-│   ├── __init__.py                  # Exposes key classes
-│   ├── image.py                     # ImageData class
-│   └── structure.py                 # Structure, Segment, Background classes
-│
+src/mira/
+├── processor.py            StructureProcessor: facade with method chaining
+├── core/                   ImageData, Structure (info / statistics dicts), Segment, Background
 ├── processing/
-│   ├── __init__.py                  # Exposes main processing functions
-│   ├── detection.py                 # Structure detection algorithms
-│   ├── segmentation.py              # Structure segmentation
-│   ├── alignment.py                 # Image alignment operations
-│   └── phase_retrieval.py           # Phase-to-height conversions
-│
-├── visualization/
-│   ├── __init__.py
-│   ├── plotter_2d.py                # 2D visualization functions
-│   └── plotter_3d.py                # 3D visualization functions
-│
-├── utils/
-│   ├── __init__.py
-│   ├── exceptions.py                # Custom exceptions
-│   └── helpers.py                   # Utility functions
-│
-├── __init__.py                      # Import and expose main classes
-└── processor.py                     # Main façade class: ImageProcessor
+│   ├── detection.py        structure detection (threshold, intensity, adaptive)
+│   ├── segmentation.py     grid, k-means and watershed segmentation
+│   ├── alignment.py        alignment of two processors (rotation, scale, translation)
+│   ├── registration.py     content-based refiners: NoRefinement, ECCRefinement, PhaseCorrelationRefinement
+│   ├── phase_retrieval.py  phase ↔ height, unwrapping, background adjustment
+│   └── calibration.py      Δn fit (calculate_delta_n → DeltaNResult)
+├── analysis/               computation only, results as dataclasses
+│   ├── segment_data.py     shared segment statistics (edge erosion, background-relative values)
+│   ├── comparison.py       linear / segment regression, Bland-Altman
+│   ├── ensemble.py         records and DataFrames over prints, summary per group
+│   ├── reliability.py      ICC(1,1), ICC(2,1), ICC(3,1) with CI and F-test
+│   ├── sensitivity.py      Δn uncertainty propagation and sweep
+│   └── topology.py         error vs. gradient and curvature (pixel size in metres)
+├── visualization/          plotting only: plotter_2d, plotter_3d, plotter_stats
+└── utils/                  exceptions, helpers, JSON serialization
 ```
 
-## Main Components
+Files named `*_old*.py` and the Seafile conflict copy are legacy and not used; they move to `attic/` after
+review (`docs/ATTIC_REVIEW.md`).
 
-### 1. Core Classes
+## Usage
 
-#### 1.1 `ImageData` (`core/image.py`)
-- Base class for image representation
-- Handles data validation, properties, and basic operations
-- Key methods: `from_file()`, `get_profile()`, `flip()`, `resize()`, `pad_to_size()`
-- Key properties: `shape`, `x_dim`, `y_dim`, `pixel_size`, `is_quadratic`
+### StructureProcessor
 
-#### 1.2 `Structure`, `Segment`, `Background` (`core/structure.py`)
-- `Structure`: Represents a detected structure in an image
-  - Key methods: `segment()`, `from_mask()`, `center()`
-  - Key properties: `mask`, `bounds`, `corner_points`, `area`, `perimeter`
-- `Segment`: Represents a portion of a structure
-  - Key methods: `extract_with_offset()` 
-  - Key properties: `mean_value`, `area`, `inner_data`
-- `Background`: Represents the background area of an image
-  - Key properties: `mean_value`, `std_value`, `mask`
-
-### 2. Processing Modules
-
-#### 2.1 Structure Detection (`processing/detection.py`)
-- `detect_structure()`: Main function for structure detection
-- `threshold_detection()`: Uses thresholding for detection
-- `intensity_detection()`: Uses intensity data for detection
-- `adaptive_detection()`: Uses adaptive thresholding
-- `clean_structure_mask()`: Cleans up detected masks
-- `detect_edges()`: Detects edges in images
-- `detect_corners()`: Detects corners in images
-
-#### 2.2 Structure Segmentation (`processing/segmentation.py`)
-- `segment_structure()`: Main function for structure segmentation
-- `segment_by_grid()`: Grid-based segmentation
-- `segment_by_kmeans()`: Uses k-means clustering
-- `segment_by_watershed()`: Uses watershed algorithm
-- `create_labeled_mask()`: Creates a labeled mask from segments
-
-#### 2.3 Alignment (`processing/alignment.py`)
-- `align_structures()`: Main function for structure alignment
-- `align_by_edges()`, `align_by_mask()`, `align_by_features()`: Alignment methods
-- `calculate_rotation()`: Calculates rotation between images
-- `normalize_pixel_size()`: Normalizes pixel sizes between images
-- `pad_to_same_size()`: Ensures images have the same dimensions
-- `center_structures()`: Centers structures for alignment
-
-#### 2.4 Phase Retrieval (`processing/phase_retrieval.py`)
-- `convert_phase_to_height()`: Converts phase to height data
-- `convert_height_to_phase()`: Converts height to phase data
-- `unwrap_phase()`: Unwraps phase to remove 2π discontinuities
-- `full_phase_retrieval()`: Complete phase retrieval pipeline
-- `adjust_background()`: Corrects background in structures
-
-### 3. Visualization Modules
-
-#### 3.1 2D Visualization (`visualization/plotter_2d.py`)
-- `plot_image()`: Basic 2D image visualization
-- `plot_structure()`: Structure visualization with bounds/corners
-- `plot_segments()`: Segment visualization with color coding
-- `plot_comparison()`: Side-by-side comparison with difference
-- `plot_profiles()`: Horizontal and vertical profile plots
-- `visualize_edges()`, `visualize_corners()`: Feature visualization
-- `create_masked_overlay()`: Creates overlay visualization
-
-#### 3.2 3D Visualization (`visualization/plotter_3d.py`)
-- `plot_surface()`: Basic 3D surface plotting
-- `plot_structure_3d()`: 3D visualization of structures
-- `plot_height_map()`: Height map with contours
-- `create_interactive_plot()`: Interactive 3D visualization
-- `export_3d_visualization()`: Multi-angle export for documentation
-
-### 4. Utilities
-
-#### 4.1 Exceptions (`utils/exceptions.py`)
-- `DataLoadError`: For file loading issues
-- `ValidationError`: For input validation problems
-- `ProcessingError`: For general processing failures
-- `StructureError`: For structure-related issues
-- `SegmentationError`: For segmentation failures
-- `AlignmentError`: For alignment issues
-- `PhaseRetrievalError`: For phase retrieval problems
-- `VisualizationError`: For visualization failures
-
-#### 4.2 Helpers (`utils/helpers.py`)
-- `get_logger()`: Creates configured logger instances
-- `ensure_numpy_array()`: Safe conversion to numpy arrays
-- `normalize_pixel_size()`: Standardizes pixel size format
-- `butterworth_filter()`: Creates 2D filters
-- `phase_to_height()`, `height_to_phase()`: Conversion functions
-- Various geometry helpers: `compute_cross_product()`, `point_in_quadrilateral()`, etc.
-
-### 5. Main Interface
-
-#### 5.1 `ImageProcessor` (`processor.py`)
-Provides a unified interface for all operations with method chaining:
-
-**Initialization & Loading:**
-- `__init__()`: Initialize with optional data
-- `load_phase_data()`: Load phase image data
-- `load_intensity_data()`: Load intensity image data
-- `from_file()`: Create processor from files
-
-**Structure Operations:**
-- `detect_structure()`: Detect structure in phase data
-- `segment_structure()`: Segment the detected structure
-- `align_with()`: Align with another structure
-
-**Phase/Height Operations:**
-- `convert_to_height()`: Convert phase to height
-- `convert_to_phase()`: Convert height to phase
-- `unwrap_phase()`: Unwrap phase data
-- `phase_retrieval()`: Perform full phase retrieval
-- `adjust_background()`: Adjust structure background
-
-**Visualization:**
-- `plot_image()`: Plot 2D image
-- `plot_structure()`: Plot structure with highlights
-- `plot_segments()`: Plot segmented structure
-- `plot_3d()`: Plot 3D surface
-- `plot_height_map()`: Plot height map with contours
-
-**Data Saving:**
-- `save_data()`: Save phase or structure data
-
-## Usage Examples
-
-### Basic Usage
+Every geometric change of a processor goes through `apply_affine_transform`, which transforms the raw
+channels, the structure mask and all segments together.
 
 ```python
-# Load data from files
-processor = ImageProcessor.from_file("phase.npy", "intensity.npy")
+import numpy as np
+from mira import StructureProcessor
 
-# Detect and segment structure
-processor.detect_structure(method='threshold')
-processor.segment_structure(method='grid', num_segments=(3, 3))
+phase = np.load("insitu_phase.npy")       # rad
+height = np.load("sensofar_height.npy")   # m
 
-# Convert to height and visualize
-processor.convert_to_height()
-processor.plot_3d()
+dhm = (
+    StructureProcessor(phase_data=phase, pixel_size=(0.25e-6, 0.25e-6))
+    .detect_structure()
+    .segment_structure(method="grid", num_segments=(3, 3))
+)
+reference = (
+    StructureProcessor(height_data=height, pixel_size=(0.25e-6, 0.25e-6))
+    .detect_structure()
+    .segment_structure(method="grid", num_segments=(3, 3))
+)
+
+delta_n = dhm.calculate_delta_n(reference, offset_pixels=10)       # stored in dhm.structure.statistics
+regression = dhm.fit_segment_regression(reference, offset_pixels=10)
+print(delta_n.delta_n, regression.r_squared)
+
+dhm.structure.set_info(doe_id="DOE3", print_id="P01")              # ids for ensembles and ICC
+dhm.save_snapshot("dhm_P01.npz")                                    # npz with JSON metadata
+restored = StructureProcessor.load_snapshot("dhm_P01.npz")
 ```
 
-### Method Chaining
+After `load_snapshot`, `structure.statistics` holds plain JSON dicts; rebuild a result explicitly, e.g.
+`DeltaNResult(**restored.structure.statistics["delta_n_segment_mean"])`.
+
+### Analyses: compute, then plot
+
+Each analysis is a compute function in `mira.analysis` that returns a dataclass, and a plot function in
+`mira.visualization.plotter_stats` that takes that dataclass.
 
 ```python
-# Process data in a single chain
-ImageProcessor.from_file("phase.npy", "intensity.npy") \
-    .detect_structure() \
-    .segment_structure() \
-    .adjust_background() \
-    .convert_to_height() \
-    .plot_height_map()
+from mira.analysis.comparison import bland_altman_compute
+from mira.analysis.reliability import compute_icc, interpret_icc
+from mira.visualization.plotter_stats import plot_bland_altman
+
+result = bland_altman_compute(predicted_height, measured_height)   # masked arrays keep their mask
+fig = plot_bland_altman(result, label_1="DHM", label_2="Sensofar", units="µm")
+
+icc = compute_icc(table, icc_type="ICC(2,1)")                       # table: segments x prints, complete
+print(icc.value, icc.ci_lower, icc.ci_upper, interpret_icc(icc.value))
 ```
 
-### Advanced Processing
+`compute_icc` is checked against `pingouin.intraclass_corr` (see `tests/test_reliability_reference.py`).
 
-```python
-# Load and prepare data
-processor1 = ImageProcessor.from_file("sample1.npy")
-processor2 = ImageProcessor.from_file("sample2.npy")
+## Conventions
 
-# Process first sample
-processor1.detect_structure() \
-    .segment_structure(method='kmeans', num_segments=(2, 2))
+- Units in names where new code is written (`_um`, `_rad`); the existing API uses metres for heights,
+  wavelengths and pixel sizes.
+- Image axis 0 is y, axis 1 is x.
+- Computation (`mira.analysis`, `mira.processing`) and plotting (`mira.visualization`) stay separate.
+- Errors are reported with the exceptions in `mira.utils.exceptions` (`ValidationError`,
+  `ProcessingError`, `SegmentationError`, `AlignmentError`, `VisualizationError`, …) rather than silent
+  fallbacks.
 
-# Process second sample
-processor2.detect_structure() \
-    .segment_structure(method='grid', num_segments=(2, 2))
+## Development
 
-# Align samples and perform phase retrieval
-processor1.align_with(processor2, method='edge') \
-    .phase_retrieval(processor2, convert_to_height=True) \
-    .plot_comparison()
+```bash
+python -m pytest        # tests in tests/, headless (matplotlib backend Agg)
+black src tests         # formatting, line length 88
 ```
 
-## Key Features
+Project files: `CLAUDE.md` (architecture and rules), `TODO.md` (task list, phase plan, open decisions),
+`WORKLOG.md` (work log), `docs/` (system plan, notes, reviews).
 
-1. **Unified Interface**: Clean, consistent API through the `ImageProcessor` class
-2. **Method Chaining**: Fluent API with all processing methods returning `self`
-3. **Flexible Input Handling**: Support for different input types (arrays, files, objects)
-4. **Comprehensive Error Handling**: Specific exceptions with informative messages
-5. **Algorithm Alternatives**: Multiple approaches for each processing task
-6. **Visualization Options**: Rich set of 2D and 3D visualization functions
-7. **Modular Design**: Well-organized components for maintainability and extensibility
+## License
 
-## Dependencies
-
-- **Core**: numpy, scipy
-- **Processing**: scikit-image (optional, for advanced algorithms)
-- **Visualization**: matplotlib
-- **Optional**: scikit-learn (for k-means segmentation)
-
-## Error Handling
-
-All operations use specific exception types for better error handling:
-
-```python
-try:
-    processor.detect_structure().segment_structure()
-except ValidationError as e:
-    print(f"Invalid input: {e}")
-except ProcessingError as e:
-    print(f"Processing failed: {e}")
-except SegmentationError as e:
-    print(f"Segmentation failed: {e}")
-```
-
-## Tips & Best Practices
-
-1. **Use method chaining** for cleaner code
-2. **Check if operations succeeded** by validating that data properties exist
-3. **Use logging** to debug complex operations
-4. **Provide pixel_size** when loading data from arrays
-5. **Set appropriate parameters** for detection and segmentation based on your data
-6. **Save intermediate results** for complex processing pipelines
-7. **Use the appropriate visualization** for your data type and analysis needs
+See `LICENSE`.
