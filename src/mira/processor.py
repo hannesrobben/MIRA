@@ -49,6 +49,7 @@ from .processing.calibration import (
     DeltaNResult,
     calculate_delta_n as fit_delta_n,
 )
+from .analysis.comparison import RegressionResult, fit_segment_regression
 from .utils.helpers import get_logger
 
 if TYPE_CHECKING:
@@ -1322,6 +1323,87 @@ class StructureProcessor:
             if isinstance(e, (ValidationError, ProcessingError)):
                 raise
             raise ProcessingError(f"delta_n fitting failed: {e!s}")
+
+    def fit_segment_regression(
+        self,
+        reference: "StructureProcessor",
+        offset_pixels: int = 10,
+        include_background: bool = True,
+        relative: bool = True,
+        statistic_name: str = "segment_regression",
+    ) -> RegressionResult:
+        """
+        Fit a linear regression of this processor's segment means against
+        those of `reference`, and store it in `structure.statistics`.
+
+        Wraps `mira.analysis.comparison.fit_segment_regression` the way
+        `calculate_delta_n` wraps the delta_n fit: `reference` provides the
+        x values (independent variable, e.g. a Sensofar or LSM height),
+        this processor the y values (e.g. the in-situ DHM channel). Each
+        segment (and optionally the background) is one data point. The
+        active channel of each processor is used as it is; unlike
+        `calculate_delta_n`, no background adjustment is applied, because
+        `relative=True` already uses background-relative means.
+
+        Parameters
+        ----------
+        reference : StructureProcessor
+            Processor segmented identically to this one (same number of
+            segments in the same layout).
+        offset_pixels : int, optional
+            Pixels excluded from every segment and background edge.
+        include_background : bool, optional
+            If True, the background is an additional data point.
+        relative : bool, optional
+            If True, use background-relative segment means.
+        statistic_name : str, optional
+            Key under which the result is stored with
+            `Structure.add_statistic`; an existing entry is overwritten.
+
+        Returns
+        -------
+        RegressionResult
+            Slope, intercept, R^2 and the points used.
+
+        Raises
+        ------
+        ValidationError
+            If either processor is not segmented or the segment counts
+            differ.
+        ProcessingError
+            If the fit itself fails.
+        """
+        try:
+            if self.structure is None or not self.structure.segments:
+                raise ValidationError(
+                    "self must be segmented (segment_structure()) before "
+                    "fitting the segment regression."
+                )
+            if reference.structure is None or not reference.structure.segments:
+                raise ValidationError(
+                    "reference must be segmented (segment_structure()) before "
+                    "fitting the segment regression."
+                )
+
+            result = fit_segment_regression(
+                structure_x=reference.structure,
+                structure_y=self.structure,
+                offset_pixels=offset_pixels,
+                include_background=include_background,
+                relative=relative,
+            )
+            self.structure.add_statistic(statistic_name, result)
+            self.logger.info(
+                f"Segment regression '{statistic_name}': slope = "
+                f"{result.slope:.6g}, intercept = {result.intercept:.6g}, "
+                f"R^2 = {result.r_squared:.4f}, n = {result.n_points}"
+            )
+            return result
+
+        except Exception as e:
+            if isinstance(e, (ValidationError, ProcessingError)):
+                raise
+            raise ProcessingError(f"Segment regression failed: {e!s}")
 
     # todo - is this really necessary?
     #   structure data is not the right approach to do ?!
