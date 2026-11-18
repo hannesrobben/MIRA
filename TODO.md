@@ -194,15 +194,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 5 — Target comparison
 
-- [ ] MI-52: Comparison [phase: 5]
-  - Priority: high
-  - Size: M
-  - Depends on: MI-51 (final tolerances: M7, deferred)
-  - Done when: `compare(product, target, *, sigma, k) -> DeviationReport` returns the deviation map,
-    RMSE, MAE, statistics per segment, the share of the area above k·sigma, the classification too low /
-    too high, and validity flags (registration confidence, coverage, product quality); tested on
-    synthetic cases.
-
 - [ ] MI-53: Stable entry point and report format [phase: 5]
   - Priority: high
   - Size: M
@@ -318,6 +309,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-52: Comparison — 2026-11-18 — `mira.deviation.compare` → `DeviationReport` 1.0: substrate levelling, deviation map, RMSE / MAE / sigma, per-segment statistics, ±k·sigma classification, validity flags; thresholds stay empty until M7 — commits: `0cf5379`.
 - [x] MI-51: Forward model — 2026-11-18 — `mira.forward`: K20 formulas mirrored with a parity test against OffAxisHolo, `Optics` with sources and no defaults, Δn calibration hook, automatic / fixed domain choice (M5 = OM4) — commits: `3faf360`.
 - [x] MI-50: Target on the product grid — 2026-11-18 — `mira.targets`: `LayerTarget` 1.0 and `resample_target` (pose shift + exact area-weighted downsampling, integral conserved, never upsamples); axis-aligned until MI-11 — commits: `96e7bb2`, `f4d7140`.
 - [x] MI-21: Phase offset and tilt between products — 2026-11-18 — `mira.overlap.fit_piston_tilt`: tilt from neighbour increments + one weighted LS pass, piston as angle of Σ U_new·conj(U_ref) at a stated centre, residual / coherence for flags; `overlap_slices` for mosaics; tolerances measured over 30 seeds on MI-22 fields — commits: `87e841a`.
