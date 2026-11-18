@@ -35,3 +35,4 @@ git show <last commit>:<original path> > <original path>
 | `todo_claude/00_SOFTWARE_PLAN_OVERVIEW.md` | `656b240` | 2026-11-18 | X-C stale plan drafts and foreign CLAUDE.md, approved 2026-11-18 |
 | `todo_claude/04_MIRA_PLAN.md` | `656b240` | 2026-11-18 | X-C stale plan drafts and foreign CLAUDE.md, approved 2026-11-18 |
 | `todo_claude/CLAUDE.md` | `656b240` | 2026-11-18 | X-C stale plan drafts and foreign CLAUDE.md, approved 2026-11-18 |
+| `src/mira/MIRA_composition.py` | `38d2bd8` | 2026-11-18 | unused sketch of `ImageData` / `Structure` / `Measurement`; reviewed for MI-10, nothing taken over (M1: "stays until MI-10") |
