@@ -19,25 +19,27 @@ Format rules (for humans and Claude):
 
 ## Phase plan
 
-Target state: MIRA turns DHM products into registered, fused and stitched products and compares them with
-the target structure (`DeviationReport` for nanofactorysystem), while the existing publication analysis
-keeps its results and becomes tested.
+Target state (Release V1.0, decision session 2026-11-17/18, master plan v0.4): MIRA runs on **both PCs**.
+On the DHM-PC, as a plug-in in worker processes of the DHMConnect service, it registers, unwraps per tile,
+levels, fuses and stitches the tiles of one structure and layer into a `LayerProduct`; on the Work-PC it
+compares the `LayerProduct` with the target (`evaluate_layer` → `DeviationReport` for nanofactorysystem).
+The existing publication analysis keeps its results and becomes tested (MI-04).
 
 | Phase | Topic | Todos | Gate before the dependent todos start |
 |---|---|---|---|
-| 0 | Baseline: clean working state, packaging, tests, import hygiene | MI-01, MI-02, MI-04, MI-05, MI-06, MI-07, MI-08 | MI-04 regression exists before non-trivial refactoring |
-| 1 | Products and geometry | MI-10, MI-11 | G2 for the final product schema |
+| 0 | Baseline: clean working state, packaging, tests, import hygiene | MI-01, MI-08 (done), MI-02, MI-04, MI-07 | MI-04 regression exists before non-trivial refactoring |
+| 1 | Products and geometry | MI-10, MI-11 | DHMConnect DL-A3 for the final message schema |
 | 2 | Registration | MI-22, MI-20, MI-21 | – |
-| 3 | Speckle fusion | MI-30, MI-31 | M3, M4 for the default method |
-| 4 | Stitching | MI-40, MI-41, MI-42 | – |
-| 5 | Target comparison | MI-50, MI-51, MI-52, MI-53 | M5, M6 (G4, G7) |
-| 6 | Integration | MI-60, MI-62, MI-61 | G5; MI-61 only after profiling |
-| A | Analysis backlog of the DOE session (publication work) | MI-70 … MI-80 | M11 for MI-79 |
+| 3 | Speckle fusion | MI-30, MI-31 | – (M3, M4 decided 2026-11-18) |
+| 4 | Stitching | MI-40, MI-41, MI-42 | – (G10 SA6 decided 2026-11-18) |
+| 5 | Target comparison | MI-50, MI-51, MI-52, MI-53 | – (M5, M6 decided); thresholds wait for M7 |
+| 6 | Integration | MI-60, MI-62, MI-61 | MI-61 only after profiling (after V1.0) |
+| A | Analysis backlog of the DOE session (publication work) | MI-70 … MI-82 | MI-04 for MI-79 (M11) and MI-82 |
 
-Suggested order: MI-01 → MI-02, MI-04, MI-05, MI-06 → MI-10 → MI-22 → MI-50, MI-51, MI-52, MI-53 (needed
-first, for the operating modes `monitor` and `shadow` of nanofactorysystem) → MI-11, MI-20, MI-21 → MI-30,
-MI-31 → MI-40, MI-41, MI-42 → MI-60, MI-62 → MI-61 if needed. Phase A runs whenever the maintainer needs
-it for a paper; MI-76 (ICC check) before any ICC number is published.
+Suggested order: MI-07 → MI-04 → MI-10 → MI-22 → MI-50, MI-51, MI-52, MI-53 (needed first, for the
+operating modes `monitor` and `shadow` of nanofactorysystem) → MI-11, MI-20, MI-21 → MI-30, MI-31 →
+MI-40, MI-41, MI-42 → MI-60, MI-62 → MI-61 after V1.0. Phase A runs whenever the maintainer needs it for a
+paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Working rules for Claude Code (in addition to CLAUDE.md)
 1. Follow the suggested order; take the first open todo whose dependencies are done. Phase A todos only
@@ -53,19 +55,28 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
 
 ## Open decisions (maintainer)
 
-| ID | Decision | Recommendation | Blocks |
+| ID | Decision | When / by what | Blocks |
 |---|---|---|---|
-| M1 | What happens to the `*_old*` files and the Seafile conflict copy (the working state is committed since `254b25e`). | Move them to `attic/` after review of the list (MI-01). | MI-01 |
-| M2 | Data model for products: extend `StructureProcessor`, or add a light `Product` type with an adapter. | New `Product` type; `StructureProcessor.from_product()` as bridge. | MI-10 |
-| M3 | Averaging domain for speckle fusion: complex field, intensity, or phase (open in F5). | Complex field after equalising offset and tilt; intensity separately. Confirm with data. | MI-30 |
-| M4 | Scope of "speckle noise optimisation": fusion of shifted captures only, or also weighting, selection and the choice of the shift pattern. | Fusion first; the pattern is planned by nanofactorysystem (T85). | MI-30 |
-| M5 | Comparison domain: expected phase computed from the target, or measured height from the phase. | Phase domain; height as derived output. Depends on G4 and G7. | MI-51 |
-| M6 | Who rasterises the target: nanofactorysystem delivers a raster, or MIRA rasterises a height map or outline onto the product grid. | nanofactorysystem delivers a height map in µm; MIRA resamples it. | MI-50 |
-| M7 | Acceptance tolerances for registration and comparison. | Set after the noise floor is measured; until then tests use synthetic data with stated tolerances. | MI-22, MI-52 |
-| M8 | GPU use on the DHM-PC (G5). | CPU first; port single kernels only after profiling. | MI-61 |
-| M9 | Python and NumPy baseline (`requires-python >= 3.10` today). | Python 3.12, NumPy 2, as the other packages (G9). | MI-02 |
-| M10 | ICC type for the paper statement: ICC(2,1) (prints of this design are reproducible in general) or ICC(3,1) (statement about exactly these N prints). | – | the ICC number in the paper (the check of all three forms, MI-76, is done) |
-| M11 | `ECCRefinement` returns the inverse warp (MI-79). Was `align_with(..., refine="ecc")` or `refine=True` used for published results? | Fix it (invert the matrix); if ECC was used for the paper, re-run those numbers and compare first. | MI-79 |
+| M7 | Acceptance tolerances for registration and comparison. | **Deferred 2026-11-18:** after a sufficient data base (noise floor, effect of the speckle reduction; study M4 with OffAxisHolo K13 and MI-31). Until then synthetic tests with tolerances in the test only; monitor thresholds stay empty. | final tolerances of MI-22, MI-52 |
+| M10 | ICC type for the paper statement: ICC(2,1) or ICC(3,1). | **Deferred 2026-11-18** to MI-04, with the paper. | the ICC number in the paper |
+| M11 | Was `align_with(..., refine="ecc")` or `refine=True` used for published results? | **Deferred 2026-11-18** to MI-04, with the paper. Recommendation unchanged: fix it; if ECC was used, re-run and compare first. | MI-79 |
+
+## Decided
+
+| ID | Date | Result |
+|---|---|---|
+| M1 | 2026-11-18 | `docs/ATTIC_REVIEW.md` approved; executed with the attic procedure X-B (local attic, `docs/ATTIC_INDEX.md`); `bland_altman.py` stays; `MIRA_composition.py` stays until MI-10. |
+| M2 | 2026-11-18 | New immutable, backend-neutral (NumPy / CuPy) types `TileProduct` (one capture: complex64 field, grid, actual position, quality, provenance) and `LayerProduct` (mosaic: unwrapped phase + `intensity_rel` float32, optional field, validity mask, tile list with transforms and anchors); units in names, `(y, x)` in µm (X-G); `from_message` / `to_message`; complex field as a regular input; the bridge `StructureProcessor.from_product()` converts µm → m and `(y, x)` → `(x, y)` in exactly one place; `StructureProcessor` unchanged. |
+| M3 | 2026-11-18 | Fusion in the complex field; registration with stage prior + sub-pixel phase correlation; piston / tilt with the same complex overlap fit as stitching (one implementation, MI-21); implicit amplitude weighting, optional quality weight per capture; count / validity per pixel (`min_count`). |
+| M4 | 2026-11-18 | One plan generator in nanofactorysystem (T85), **one algorithm here**: fusion (MI-30) and stitching (MI-40) are two configurations of one pipeline. Rule: at least 9 positions per structure; jitter for large structures. V1.0 scope: fusion + weighting + planned pattern; later selection and adaptive pattern. Study with K13 / MI-31: σ² ≈ σ²_t / (N_frames · N_pos) + σ²_coh / N_pos. |
+| M5 | 2026-11-18 | = OM4 of nanofactorysystem: flexible comparison domain (phase preferred, else height; can be fixed); the report states its `domain`. |
+| M6 | 2026-11-18 | nanofactorysystem rasterises at `pixel_um = min(half hatch distance, product pitch)`; MIRA only shifts / transforms and downsamples (area-weighted), never upsamples; exact masks from the footprint polygons; later source `design_heightmap`. |
+| M8 | 2026-11-18 | CPU first on the DHM-PC (32 threads, worker processes); GPU after profiling, after V1.0. |
+| M9 (G9) | 2026-11-18 | `requires-python >= 3.12`, NumPy 2; tests on 3.12 and 3.14 (MI-07). |
+| G4 / G7 | 2026-11-18 | The phase ↔ height formulas are owned by OffAxisHolo `fieldops` (K20); MIRA imports them optionally or mirrors them with a parity test. No silent defaults for indices; publication scripts set n = 1.52 explicitly (MI-82). |
+| G5-new / N3 | 2026-11-18 | MIRA runs as a plug-in on the DHM-PC (registration, fusion, stitching, unwrapping per tile, detection, levelling; SA5) and on the Work-PC (`evaluate_layer`, G6; offline analysis). |
+| G10 SA6 | 2026-11-18 | Stitching algorithm of the maintainer (MI-40). |
+| MI-04 | 2026-11-18 | No DOE3 test suite exists → a **new baseline** from the publication scripts on stored data (MI-04). |
 
 ## Open
 
@@ -74,37 +85,56 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
 - [ ] MI-07: Python and NumPy baseline (follow-up of MI-02) [phase: 0]
   - Priority: medium
   - Size: S
-  - Depends on: M9
-  - Done when: `requires-python`, the classifiers and black's `target-version` follow M9 (recommended:
-    Python 3.12, NumPy 2); a fresh install of `.[dev]` passes `python -m pytest`.
+  - Depends on: – (M9 decided 2026-11-18)
+  - Done when: `requires-python >= 3.12`, classifiers 3.12 and 3.14, black's `target-version` and NumPy 2
+    follow M9; a fresh install of `.[dev]` passes `python -m pytest` on Python 3.12 and 3.14 (versions
+    and date in `WORKLOG.md`).
 
-- [ ] MI-08: Move the approved legacy files to the attic (follow-up of MI-01) [phase: 0]
+- [ ] MI-04: Test baseline from the publication scripts (new baseline) [phase: 0]
   - Priority: high
-  - Size: S
-  - Depends on: M1 (the maintainer approves the list in `docs/ATTIC_REVIEW.md`, completely or in part)
-  - Done when: the approved files are moved with `git mv` to `attic/` keeping their relative path (one
-    commit), nothing is deleted, `python -m pytest` passes, CLAUDE.md names the attic.
+  - Size: L
+  - Depends on: the maintainer's answer on the data (asked when the work starts)
+  - Done when:
+    - **first** the maintainer is asked which stored data to use, together with a proposal for the
+      implementation and the snapshot data format; the old experiment directory does not follow today's
+      storage layout, so a mapping is part of the proposal; the maintainer provides the paper or
+      information about it;
+    - the publication scripts run with the current `main` on those data; key numbers (Δn, slope / R²,
+      Bland-Altman, ICC, sensitivity) and one or two snapshots are frozen as a regression test with
+      stated tolerances; the numbers are compared once by hand with the paper;
+    - M10 (ICC form) and M11 (ECC used?) are answered with the paper and recorded in "Decided";
+    - `python -m pytest` runs and its result is recorded as baseline in `WORKLOG.md`.
+  - Note: reviewing the data probably needs several follow-up questions to the maintainer.
 
 ### Phase 1 — Products and geometry
 
-- [ ] MI-10: Product data model [phase: 1]
+- [ ] MI-10: Product data model `TileProduct` / `LayerProduct` (M2) [phase: 1]
   - Priority: high
-  - Size: M
-  - Depends on: M2, G2 (final schema)
+  - Size: L
+  - Depends on: DHMConnect DL-A3 (final schema)
   - Done when:
-    - `Product` holds complex field or phase plus intensity, pixel size (y, x) in µm, stage position, z,
-      wavelength, medium, quality, ids and material snapshot;
-    - constructors from a `ProductSet` message, from an OffAxisHolo `ReconstructionResult` (optional
-      import) and from `experiment.h5` (`h5py` only); a bridge to `StructureProcessor`;
-    - a round trip against the shared example messages (vendored under `tests/contracts/`) passes.
+    - immutable, backend-neutral (NumPy / CuPy) types `TileProduct` (complex64 field, grid with
+      `pixel_um` `(y, x)` and `origin_um`, actual stage position, z with `propagation_index`, wavelength,
+      quality, ids, material snapshot, provenance) and `LayerProduct` (unwrapped phase + `intensity_rel`
+      float32, optional complex field, validity mask, grid, tile list with transforms, piston / tilt,
+      anchor, residual, discarded border band, quality per tile);
+    - the complex field is a regular input (today MIRA has no complex-field input);
+    - `from_message` / `to_message` against the shared example messages (vendored under
+      `tests/contracts/`), constructors from an OffAxisHolo `ReconstructionResult` (optional import) and
+      from `experiment.h5` (`h5py` only);
+    - the bridge `StructureProcessor.from_product()` converts µm → m and `(y, x)` → `(x, y)` in exactly one
+      place; `StructureProcessor` is unchanged;
+    - `MIRA_composition.py` is reviewed while designing and then moved to the attic (X-B).
 
 - [ ] MI-11: Stage-to-image geometry [phase: 1]
   - Priority: medium
   - Size: M
   - Depends on: MI-10
   - Done when:
-    - a model maps stage micrometres to product pixels (rotation, scale, axis flips, offset) per
-      objective; it is estimated from captures with known shifts and saved / loaded;
+    - a model maps stage micrometres to product pixels (rotation, scale, shear, axis flips, offset) per
+      objective and per camera / DHM; it loads the versioned calibration file of nanofactorysystem T104
+      (id, date, residuals) and falls back to rotation 0 and the nominal pixel size with a generous
+      tolerance when none exists;
     - `tools/Transform` of nanofactorysystem (camera case) is reviewed for reuse;
     - partial result allowed: model and estimation on synthetic data; the real calibration needs captures.
 
@@ -123,8 +153,9 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
   - Size: L
   - Depends on: MI-11, MI-22
   - Done when:
-    - coarse placement from positions and MI-11, then sub-pixel refinement restricted to the overlap
-      (reusing the refiners in `processing/registration.py`);
+    - coarse placement from the stage position (prior) and MI-11, then sub-pixel phase correlation
+      restricted to the overlap and to the pose tolerance (`pose_tolerance_um`), reusing the refiners in
+      `processing/registration.py`;
     - returns transform and a confidence value; low confidence falls back to the stage position and is
       flagged; tested on MI-22 fields.
 
@@ -132,19 +163,24 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
   - Priority: high
   - Size: M
   - Depends on: MI-22
-  - Done when: a robust estimate of piston and linear phase terms from the overlap of two products is
-    tested on MI-22 fields.
+  - Done when: a robust estimate of piston (angle of Σ U_new · conj(U_ref) over the complex overlap) and
+    linear phase terms from the overlap of two products is tested on MI-22 fields; it is the **one**
+    implementation used by fusion (MI-30) and stitching (MI-40).
 
 ### Phase 3 — Speckle fusion
 
-- [ ] MI-30: Fusion of a speckle set [phase: 3]
+- [ ] MI-30: Fusion of a speckle set (M3, M4) [phase: 3]
   - Priority: high
   - Size: L
-  - Depends on: MI-20, MI-21; M3, M4
+  - Depends on: MI-20, MI-21
   - Done when:
-    - `fuse(products, method=...)` registers, equalises and averages; returns the fused product, the
-      transform of every member and the noise in the reference region before and after;
-    - partial result allowed: complex and intensity averaging implemented, default left open.
+    - the pipeline shared with MI-40 registers, equalises piston / tilt (MI-21) and averages in the
+      **complex field** with implicit amplitude weighting and an optional quality weight per capture;
+      count and validity per pixel (`min_count`); returns the fused `LayerProduct`, the transform of every
+      member and the noise in the reference region before and after;
+    - a configuration for small structures (≥ 9 positions around the centre, `single_shot` allowed) and
+      a comparison of the phase median (noise in the substrate, edge sharpness) on synthetic data exist;
+    - all parameters are configurable with the start values of nanofactorysystem T85.
 
 - [ ] MI-31: Noise metrics [phase: 3]
   - Priority: medium
@@ -152,25 +188,44 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
   - Depends on: –
   - Done when: shared functions for the noise in a reference region and its spectrum (reusing the
     ensemble statistics and PSD tools, see MI-75) exist, so that fusion, the N-study (OffAxisHolo K13)
-    and the comparison report the same number.
+    and the comparison report the same number;
+    - the speckle / position study (M4, with K13) can be run from them: noise vs. frames (fixed
+      positions), noise vs. positions (fixed frames), minimum number of positions, correlation length of
+      the coherent noise pattern; model σ² ≈ σ²_t / (N_frames · N_pos) + σ²_coh / N_pos.
 
 ### Phase 4 — Stitching
 
-- [ ] MI-40: Stitching [phase: 4]
+- [ ] MI-40: Stitching (G10 SA6) [phase: 4]
   - Priority: high
   - Size: L
   - Depends on: MI-20, MI-21
-  - Done when:
-    - pairwise registration in the overlaps, a global least-squares adjustment of positions, phase
-      offsets and tilts over the whole raster, and blending with weights that fall off towards the tile
-      edge produce mosaic, tiles and transforms;
-    - a tile may itself be a fused speckle set; tested on a synthetic raster.
+  - Done when the maintainer's algorithm runs on a synthetic raster:
+    - order: first a ring of tiles with ≈ 50 % substrate (each anchored to the substrate), then inwards;
+      the tile measured before is ground truth;
+    - a border band of every tile is discarded after propagation (width a parameter; estimate
+      |z| · tan θ_max with sin θ_max = NA / n);
+    - **unwrapping per tile before stitching** (OffAxisHolo K11 helper, `fast2d` default): piston from the
+      complex overlap, integer k · 2π from the unwrapped difference, consistency check (constant
+      difference, otherwise flag the tile / guided unwrapping);
+    - a final global least-squares adjustment of all overlaps with the ring tiles as absolute anchors;
+      tiles without substrate are anchored through the overlaps and the anchor is recorded per tile
+      (`reference_source` / `reference_fraction` per tile, SA4);
+    - output `LayerProduct` with mosaic, tiles, transforms, residuals; works incrementally (tile by
+      tile, MI-60); a tile may itself be a fused speckle set;
+    - note for K11-T (OffAxisHolo `docs/realtime/unwrapping_comparison.md`): store spatial and, once
+      available, temporal results per layer during the study.
 
-- [ ] MI-41: Stage-to-camera calibration from stitching [phase: 4]
-  - Priority: low
-  - Size: S
-  - Depends on: MI-40, MI-11
-  - Done when: the residual shifts of MI-40 update the geometry model of MI-11 (rotation, scale).
+- [ ] MI-41: Detection and fit of the calibration marks (G10 SA2) [phase: 4]
+  - Priority: high
+  - Size: M
+  - Depends on: MI-11
+  - Done when:
+    - the printed cross + square of nanofactorysystem T104 are detected in camera and DHM images; the
+      cross gives the offset of the centres, the square rotation / scale / shear; the cross imaged at known
+      stage offsets (e.g. 3 × 3) gives an affine least-squares fit independent of the galvo scale, with
+      residuals;
+    - the result feeds the calibration file of T104 and the model of MI-11; residual shifts of MI-40 can
+      refine it later; tested on synthetic marks.
 
 - [ ] MI-42: Size limits [phase: 4]
   - Priority: low
@@ -184,23 +239,25 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
 - [ ] MI-50: Target on the product grid [phase: 5]
   - Priority: high
   - Size: M
-  - Depends on: MI-10; M6
-  - Done when: a `LayerTarget` (height map and mask in µm, position) is resampled onto the pixel grid of
-    a product using MI-11 (or the stage position until MI-11 exists) and the detected pose of the
-    structure (existing detection and alignment).
+  - Depends on: MI-10
+  - Done when: a `LayerTarget` (height map and exact mask in µm, position) is shifted / transformed onto the
+    pixel grid of a `LayerProduct` using MI-11 (or the stage position until MI-11 exists) and the detected
+    pose of the structure; it is only **downsampled** (area-weighted), never upsampled (M6).
 
 - [ ] MI-51: Forward model [phase: 5]
   - Priority: high
   - Size: M
-  - Depends on: MI-50; M5, G4, G7
-  - Done when: the expected phase is computed from target height, wavelength and the index difference
-    of the material state, with the inverse for the height output; `calculate_delta_n` is reused for
-    calibration. Partial result allowed with the index difference as explicit input.
+  - Depends on: MI-50, OffAxisHolo K20 (formulas)
+  - Done when: the expected phase is computed from target height, wavelength and `n_structure` −
+    `n_surround` of the material snapshot (in-situ: cured in resin vs. liquid resin), with the inverse
+    for the height output; the comparison domain is chosen automatically (phase preferred, else height)
+    or fixed (M5 = OM4); the formulas come from OffAxisHolo `fieldops` (optional import) or are mirrored
+    with a parity test; no default index; `calculate_delta_n` is reused for calibration.
 
 - [ ] MI-52: Comparison [phase: 5]
   - Priority: high
   - Size: M
-  - Depends on: MI-51; M7
+  - Depends on: MI-51 (final tolerances: M7, deferred)
   - Done when: `compare(product, target, *, sigma, k) -> DeviationReport` returns the deviation map,
     RMSE, MAE, statistics per segment, the share of the area above k·sigma, the classification too low /
     too high, and validity flags (registration confidence, coverage, product quality); tested on
@@ -211,18 +268,20 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
   - Size: M
   - Depends on: MI-52
   - Done when: `mira.api.evaluate_layer(product, target, context, settings) -> DeviationReport` exists;
-    the report is a header dictionary plus arrays with `schema_version` and the computing time; a test
-    validates it against the shared example. This is what nanofactorysystem T90 calls.
+    the report is a header dictionary plus arrays with `schema_version`, `domain` and the computing
+    time; a test validates it against the shared example. This is what nanofactorysystem T90 calls on the
+    Work-PC (G6).
 
 ### Phase 6 — Integration
 
-- [ ] MI-60: Plug-in for the DHM service [phase: 6]
-  - Priority: medium
+- [ ] MI-60: Plug-in for the DHM service (G5-new) [phase: 6]
+  - Priority: high
   - Size: M
-  - Depends on: MI-30, MI-40; G5
-  - Done when: `mira.plugins.dhmconnect` offers `fuse_group(members, params)` and
-    `stitch_group(members, params)` returning a `GroupProduct`; pure functions, no network; called by
-    DHMConnect DL-B9.
+  - Depends on: MI-30, MI-40
+  - Done when: `mira.plugins.dhmconnect` offers an incremental group API (open with the `GroupSpec`,
+    `add_tile(TileProduct)` while the stage moves to the next position, `close()` → `LayerProduct`) for the
+    fusion and the stitching configuration; pure functions, no network, picklable-free inputs (arrays +
+    JSON); runs in DHMConnect worker processes on the CPU (M8); called by DL-B9; timings per tile.
 
 - [ ] MI-62: Offline use on experiment files [phase: 6]
   - Priority: medium
@@ -235,7 +294,7 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
 - [ ] MI-61: GPU kernels [phase: 6]
   - Priority: low
   - Size: M
-  - Depends on: a profile that shows the need; M8
+  - Depends on: a profile that shows the need (after V1.0, M8)
   - Done when: only the kernels the profile names are ported, with parity tests against the CPU path.
 
 ### Phase A — Analysis backlog of the DOE session (from `docs/notes/*.txt`)
@@ -283,7 +342,7 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
     (radial frequency axis in 1/µm, mean power per bin, optional half-power frequency); a log-log plot
     with optional reference slopes is in `plotter_stats.py`; tests on synthetic data; MI-31 uses it.
 
-- [ ] MI-79: Invert the warp of `ECCRefinement` (found during MI-05) [phase: A]
+- [ ] MI-79: Invert the warp of `ECCRefinement` (found during MI-05; M11 answered in MI-04) [phase: A]
   - Priority: high
   - Size: S
   - Depends on: M11
@@ -302,30 +361,20 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
     background of 0 gave six "corner points" and an almost empty first segment); the result is either
     a fix with a test or a documented limit with a validation error instead of empty segments.
 
+- [ ] MI-82: No silent default refractive index (G7, found during the decision session 2026-11-18) [phase: A]
+  - Priority: medium
+  - Size: S
+  - Depends on: MI-04
+  - Done when: the default `n_resin = 1.52` no longer applies silently in new code paths (missing index →
+    error or warning naming the source); the publication scripts pass n = 1.52 explicitly; the MI-04
+    regression shows unchanged numbers.
+
 ## In Progress
 <!-- Claude Code moves a todo here when starting work. -->
-- [ ] MI-01: Clean up the legacy copies [phase: 0]
-  - Priority: high
-  - Size: S
-  - Depends on: M1
-  - Done when:
-    - the maintainer has seen a diff of the conflict copy `visualization/plotter_2d (SFConflict …).py`
-      against `plotter_2d.py` and the list of legacy files (`core/image_old.py`, `core/structure_old.py`,
-      `processing/alignment_old*.py`, `processing/detection_old.py`, `processing/phase_retrieval_old*.py`,
-      `processor_old*.py`, `processor_old^1.py`, `visualization/plotter_2d_old*.py`,
-      `visualization/bland_altman_snippet.py` if superseded by `bland_altman.py`);
-    - approved files are moved with `git mv` to `attic/` (one commit), nothing is deleted;
-    - the two German session notes in `src/mira/` move to `docs/notes/` (they are not package data).
-  - Progress 2026-11-17: the session notes are in `docs/notes/` and `docs/ATTIC_REVIEW.md` holds the
-    conflict-copy diff (one docstring, no code) and the legacy list (`ebfc2b0`). Remaining: the move
-    itself after M1, see MI-08.
-  - Note: the working state itself was committed by the maintainer on 2026-11-15 (`254b25e`), which
-    covers the first part of the original MI-01.
-
 - [ ] MI-02: Packaging [phase: 0]
   - Priority: high
   - Size: S
-  - Depends on: M9
+  - Depends on: MI-07
   - Done when:
     - the conflict between static and dynamic dependencies is removed (no `requirements.txt` reference);
       author and description are set; extras `viz` (matplotlib), `analysis` (pandas), `dev`;
@@ -333,24 +382,17 @@ it for a paper; MI-76 (ICC check) before any ICC number is published.
     - an editable install works in a fresh environment and `python -m pytest` runs there.
   - Progress 2026-11-17: everything except the Python / NumPy baseline (`4280aec`; pingouin in `dev`
     with `91c2cd5`); checked in fresh environments with `.[dev]` and with the core only. Remaining:
-    MI-07 (needs M9).
+    MI-07 (M9 decided 2026-11-18).
 
 
 ## Blocked
 <!-- Format: todo as above, plus the line "Blocked by: <reason or ID>". -->
-- [ ] MI-04: Test baseline [phase: 0]
-  - Priority: high
-  - Size: M
-  - Depends on: the maintainer names where the test suite of the DOE3 work lives
-  - Done when:
-    - that suite is in `tests/` and runs; a small regression on stored snapshots covers the analysis
-      results of the publication;
-    - `python -m pytest` runs and its result is recorded as baseline in `WORKLOG.md`.
-  - Blocked by: the maintainer has to name the location of the test suite of the DOE3 work (it is not
-    in this folder).
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-01: Clean up the legacy copies — 2026-11-18 — Longer `plot_dual_profile` docstring taken over, then the approved list (M1) moved to the local attic (X-B) — commits: `dc176cd`, `2a4e995`.
+- [x] MI-08: Move the approved legacy files to the attic — 2026-11-18 — Conflict copy, 19 `*_old*` modules, `bland_altman_snippet.py`, the empty `tests/_test/test_dhm.py` and `todo_claude/` moved to the local, Git-ignored `attic/`; `docs/ATTIC_INDEX.md` lists original path and last commit; 119 tests pass — commits: `2a4e995`.
+- [x] MI-83: Refresh the system plan copy — 2026-11-18 — `docs/system/SOFTWARE_PLAN_OVERVIEW.md` is the unchanged copy of master v0.4 (X-D) — commits: `b611c4e`.
 - [x] DOE analysis extensions (before this list existed) — 2026-11-15 committed — Bland-Altman, Δn calibration, shared segment statistics, regression, `info` / `statistics` dicts with snapshot persistence, ensembles, error vs. topology, Δn sensitivity, ICC (details in `docs/notes/zusammenfassung_aenderungen_und_tests.txt`). — commits: `254b25e`
 - [x] MI-03: Project files — 2026-11-15 — `CLAUDE.md`, `TODO.md`, `WORKLOG.md` and `docs/system/SOFTWARE_PLAN_OVERVIEW.md` created; the README update is split off as MI-06. Committed 2026-11-17 on branch `docs/project-files`. — commits: `b819b2c`, `bf079be`, `fe99316`
 - [x] MI-05: Import hygiene — 2026-11-17 — OpenCV, matplotlib and pandas are imported where used; a subprocess test checks `sys.modules` after `import mira`, and smoke tests run the lazy paths (they found MI-79). — commits: `e3adbbd`
