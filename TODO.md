@@ -100,27 +100,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 1 — Products and geometry
 
-- [ ] MI-10: Product data model `TileProduct` / `LayerProduct` (M2) [phase: 1]
-  - Priority: high
-  - Size: L
-  - Depends on: DHMConnect DL-A3 (final schema)
-  - Done when:
-    - immutable, backend-neutral (NumPy / CuPy) types `TileProduct` (complex64 field, grid with
-      `pixel_um` `(y, x)` and `origin_um`, actual stage position, z with `propagation_index`, wavelength,
-      quality, ids, material snapshot, provenance) and `LayerProduct` (unwrapped phase + `intensity_rel`
-      float32, optional complex field, validity mask, grid, tile list with transforms, piston / tilt,
-      anchor, residual, discarded border band, quality per tile);
-    - the complex field is a regular input (today MIRA has no complex-field input);
-    - `from_message` / `to_message` against the shared example messages (vendored under
-      `tests/contracts/`), constructors from an OffAxisHolo `ReconstructionResult` (optional import) and
-      from `experiment.h5` (`h5py` only);
-    - the bridge `StructureProcessor.from_product()` converts µm → m and `(y, x)` → `(x, y)` in exactly one
-      place; `StructureProcessor` is unchanged;
-    - `MIRA_composition.py` is reviewed while designing and then moved to the attic (X-B).
-  - Contracts available 2026-11-18: DHMConnect `fc85f5c` (DL-A3): `ProductSet`, `LayerProduct`,
-    `LayerTarget`, `DeviationReport` with examples (`DHMConnect/docs/CONTRACTS.md`); vendor with
-    `python -m dhmconnect.schemas.export tests/contracts --commit fc85f5c`.
-
 - [ ] MI-11: Stage-to-image geometry [phase: 1]
   - Priority: medium
   - Size: M
@@ -373,6 +352,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-10: Product data model `TileProduct` / `LayerProduct` (M2) — 2026-11-18 — `mira.products` with immutable, backend-neutral `TileProduct` (↔ `ProductSet` 1.0, complex field as input, grid centred on the actual stage position) and `LayerProduct` (↔ `LayerProduct` 1.0, HDF5 `header_json` + one dataset per buffer), `StructureProcessor.from_product()` as the one unit / axis bridge; tested against the vendored DHMConnect examples (`fc85f5c`); `MIRA_composition.py` moved to the attic — commits: `5771568`, `79d7091`, `0e84ba8`.
 - [x] MI-02: Packaging — 2026-11-18 — Static dependencies only, extras `viz` / `analysis` / `dev`, pandas declared, author and description set; the last criterion (fresh editable install + tests) was met with the MI-07 baseline on 3.12 and 3.14 — commits: `4280aec`, `91c2cd5`, `7e6ecd7`.
 - [x] MI-07: Python and NumPy baseline — 2026-11-18 — `requires-python >= 3.12`, `numpy>=2.0`, classifiers 3.12 / 3.14, black `py312`; fresh `.[dev]` installs pass `python -m pytest` on CPython 3.12.3 and 3.14.10 (119 passed, 1 xfailed each) — commits: `7e6ecd7`.
 - [x] MI-01: Clean up the legacy copies — 2026-11-18 — Longer `plot_dual_profile` docstring taken over, then the approved list (M1) moved to the local attic (X-B) — commits: `dc176cd`, `2a4e995`.
