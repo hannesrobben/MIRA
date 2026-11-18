@@ -7,7 +7,8 @@ name = "mira"
 version = "0.1.0"
 description = "MIRA - Microscopy Image Registration & Analysis: structure detection, segmentation, alignment and statistics of phase and height images of printed micro-structures"
 readme = "README.md"
-requires-python = ">=3.10"
+# Baseline M9 / G9 (2026-11-18): >= 3.12 and NumPy 2, tested on 3.12 and 3.14.
+requires-python = ">=3.12"
 license = { file = "LICENSE" }
 
 authors = [
@@ -27,15 +28,17 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Image Processing",
+    "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.14",
     "Operating System :: OS Independent"
 ]
 
 # Core: everything `import mira` and the processing / analysis computations
 # need. OpenCV >= 4.10.0.84 is the first build that works with NumPy 2.
-# The Python / NumPy baseline itself is decision M9 (TODO.md).
+# The Python / NumPy baseline is decision M9 (decided 2026-11-18).
 dependencies = [
-    "numpy",
+    "numpy>=2.0",
     "scipy",
     "opencv-python>=4.10.0.84",
     "scikit-image",
@@ -80,7 +83,7 @@ pythonpath = ["src"]
 
 [tool.black]
 line-length = 88
-target-version = ["py310"]
+target-version = ["py312"]
 
 [tool.isort]
 profile = "black"
