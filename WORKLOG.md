@@ -306,3 +306,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest tests/test_targets.py`: 6 passed; full suite at the merge.
 - **Commits:** `96e7bb2` test(contracts): vendor LayerTarget, DeviationReport, ParameterSet, GroupSpec [MI-50], `f4d7140` feat(comparison): transfer a LayerTarget onto the product grid [MI-50], plus the `docs(todo)` commit.
 - **Follow-ups:** rotation / scale of the stage-to-image model enter with MI-11.
+
+### 2026-11-18 22:44 CET — [MI-51] Forward model
+- **Status:** done
+- **Changes:**
+  - `src/mira/forward.py` (new): mirrored `phase_to_height_um` / `height_to_phase_rad`, `Optics`, `choose_domain`, `to_domain`
+  - `tests/test_forward.py` (new): 8 tests
+  - `TODO.md`: MI-51 to Done; `WORKLOG.md`: this entry
+- **Tests:** MIRA `.venv`: 7 passed, 1 skipped (parity, no OffAxisHolo); OffAxisHolo `.venv` with MIRA on the path: 8 passed (parity bit-identical).
+- **Commits:** `3faf360` feat(comparison): add the height <-> phase forward model and domain choice [MI-51], plus the `docs(todo)` commit.
+- **Follow-ups:** none.
