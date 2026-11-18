@@ -194,16 +194,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 5 — Target comparison
 
-- [ ] MI-51: Forward model [phase: 5]
-  - Priority: high
-  - Size: M
-  - Depends on: MI-50, OffAxisHolo K20 (formulas)
-  - Done when: the expected phase is computed from target height, wavelength and `n_structure` −
-    `n_surround` of the material snapshot (in-situ: cured in resin vs. liquid resin), with the inverse
-    for the height output; the comparison domain is chosen automatically (phase preferred, else height)
-    or fixed (M5 = OM4); the formulas come from OffAxisHolo `fieldops` (optional import) or are mirrored
-    with a parity test; no default index; `calculate_delta_n` is reused for calibration.
-
 - [ ] MI-52: Comparison [phase: 5]
   - Priority: high
   - Size: M
@@ -328,6 +318,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-51: Forward model — 2026-11-18 — `mira.forward`: K20 formulas mirrored with a parity test against OffAxisHolo, `Optics` with sources and no defaults, Δn calibration hook, automatic / fixed domain choice (M5 = OM4) — commits: `3faf360`.
 - [x] MI-50: Target on the product grid — 2026-11-18 — `mira.targets`: `LayerTarget` 1.0 and `resample_target` (pose shift + exact area-weighted downsampling, integral conserved, never upsamples); axis-aligned until MI-11 — commits: `96e7bb2`, `f4d7140`.
 - [x] MI-21: Phase offset and tilt between products — 2026-11-18 — `mira.overlap.fit_piston_tilt`: tilt from neighbour increments + one weighted LS pass, piston as angle of Σ U_new·conj(U_ref) at a stated centre, residual / coherence for flags; `overlap_slices` for mosaics; tolerances measured over 30 seeds on MI-22 fields — commits: `87e841a`.
 - [x] MI-22: Synthetic test fields — 2026-11-18 — `mira.synthetic`: analytic scene sampled exactly at any sub-pixel position, known piston / tilt / stage error, white + camera-fixed coherent noise (M4 model); tolerances stated in the tests, final ones wait for M7 — commits: `aaa3085`.
