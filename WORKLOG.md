@@ -316,3 +316,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** MIRA `.venv`: 7 passed, 1 skipped (parity, no OffAxisHolo); OffAxisHolo `.venv` with MIRA on the path: 8 passed (parity bit-identical).
 - **Commits:** `3faf360` feat(comparison): add the height <-> phase forward model and domain choice [MI-51], plus the `docs(todo)` commit.
 - **Follow-ups:** none.
+
+### 2026-11-18 22:46 CET — [MI-52] Comparison
+- **Status:** done
+- **Changes:**
+  - `src/mira/deviation.py` (new): `DeviationReport`, `compare`
+  - `tests/test_deviation.py` (new): 7 tests
+  - `TODO.md`: MI-52 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest tests/test_deviation.py`: 7 passed; full suite at the merge.
+- **Commits:** `0cf5379` feat(comparison): compare a LayerProduct with its target [MI-52], plus the `docs(todo)` commit.
+- **Follow-ups:** final tolerances and monitor thresholds wait for M7.
