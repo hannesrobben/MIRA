@@ -285,3 +285,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: all pass (see the merge); new file 7 passed.
 - **Commits:** `aaa3085` feat(synthetic): add synthetic DHM fields with known ground truth [MI-22], plus the `docs(todo)` commit.
 - **Follow-ups:** none; final tolerances follow M7.
+
+### 2026-11-18 22:40 CET — [MI-21] Phase offset and tilt between products
+- **Status:** done
+- **Changes:**
+  - `src/mira/overlap.py` (new): `OverlapFit`, `fit_piston_tilt`, `remove_piston_tilt`, `overlap_slices`
+  - `tests/test_overlap.py` (new): 10 tests
+  - `TODO.md`: MI-21 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest tests/test_overlap.py`: 10 passed; full suite at the merge. Measured scatter (Office PC, 30 seeds, 128² px of 0.2 µm, 0.2 rad white noise): piston std 0.0021 rad, tilt std 0.00028 rad/µm (0.0019 without the LS refinement); with an independent 0.15 rad coherent pattern (corr 1 µm): 0.031 rad and 0.0034 rad/µm. Test tolerances ≈ 3 σ.
+- **Commits:** `87e841a` feat(registration): fit piston and tilt from the complex overlap [MI-21], plus the `docs(todo)` commit.
+- **Follow-ups:** the coherent pattern dominates the piston error between single tiles; the speckle study (MI-31, M4) quantifies it on real data.
