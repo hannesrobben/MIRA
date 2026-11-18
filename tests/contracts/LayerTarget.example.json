@@ -1,0 +1,94 @@
+{
+  "message_type": "LayerTarget",
+  "schema_version": "1.0",
+  "target_id": "tgt-pillar_03-L004",
+  "experiment_uuid": "6b1f3c1e-2d4a-4f7e-9c0a-1b2c3d4e5f60",
+  "structure_id": "pillar_03",
+  "layer_index": 4,
+  "domain": "height",
+  "source": "footprint",
+  "grid": {
+    "origin_um": [
+      800.0,
+      1150.0
+    ],
+    "pixel_um": [
+      0.1,
+      0.1
+    ],
+    "shape": [
+      1000,
+      1000
+    ]
+  },
+  "footprint_um": [
+    [
+      [
+        840.0,
+        1190.0
+      ],
+      [
+        840.0,
+        1210.0
+      ],
+      [
+        860.0,
+        1210.0
+      ],
+      [
+        860.0,
+        1190.0
+      ]
+    ]
+  ],
+  "material": {
+    "material_id": "sz2080",
+    "name": "SZ2080",
+    "registry_version": "1",
+    "wavelength_nm": 674.994,
+    "states": {
+      "uncured": {
+        "n": 1.508,
+        "source": "maintainer measurement 2026"
+      },
+      "cured_in_resin": {
+        "n": 1.52,
+        "source": "maintainer measurement 2026"
+      },
+      "cured_developed": {
+        "n": 1.52,
+        "source": "maintainer measurement 2026, checked against air"
+      }
+    }
+  },
+  "n_structure": 1.52,
+  "n_surround": 1.508,
+  "generator": {
+    "name": "nanofactorysystem.targets.rasterise",
+    "version": "0.1"
+  },
+  "warnings": [
+    "footprint only: no voxel model for this material"
+  ],
+  "buffers": [
+    {
+      "name": "height_um",
+      "dtype": "float32",
+      "shape": [
+        1000,
+        1000
+      ],
+      "byte_order": "little"
+    },
+    {
+      "name": "mask",
+      "dtype": "uint8",
+      "shape": [
+        1000,
+        1000
+      ],
+      "byte_order": "little"
+    }
+  ],
+  "created_utc": "2026-11-18T09:11:50Z"
+}

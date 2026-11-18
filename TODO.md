@@ -194,14 +194,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 5 — Target comparison
 
-- [ ] MI-50: Target on the product grid [phase: 5]
-  - Priority: high
-  - Size: M
-  - Depends on: MI-10
-  - Done when: a `LayerTarget` (height map and exact mask in µm, position) is shifted / transformed onto the
-    pixel grid of a `LayerProduct` using MI-11 (or the stage position until MI-11 exists) and the detected
-    pose of the structure; it is only **downsampled** (area-weighted), never upsampled (M6).
-
 - [ ] MI-51: Forward model [phase: 5]
   - Priority: high
   - Size: M
@@ -336,6 +328,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-50: Target on the product grid — 2026-11-18 — `mira.targets`: `LayerTarget` 1.0 and `resample_target` (pose shift + exact area-weighted downsampling, integral conserved, never upsamples); axis-aligned until MI-11 — commits: `96e7bb2`, `f4d7140`.
 - [x] MI-21: Phase offset and tilt between products — 2026-11-18 — `mira.overlap.fit_piston_tilt`: tilt from neighbour increments + one weighted LS pass, piston as angle of Σ U_new·conj(U_ref) at a stated centre, residual / coherence for flags; `overlap_slices` for mosaics; tolerances measured over 30 seeds on MI-22 fields — commits: `87e841a`.
 - [x] MI-22: Synthetic test fields — 2026-11-18 — `mira.synthetic`: analytic scene sampled exactly at any sub-pixel position, known piston / tilt / stage error, white + camera-fixed coherent noise (M4 model); tolerances stated in the tests, final ones wait for M7 — commits: `aaa3085`.
 - [x] MI-10: Product data model `TileProduct` / `LayerProduct` (M2) — 2026-11-18 — `mira.products` with immutable, backend-neutral `TileProduct` (↔ `ProductSet` 1.0, complex field as input, grid centred on the actual stage position) and `LayerProduct` (↔ `LayerProduct` 1.0, HDF5 `header_json` + one dataset per buffer), `StructureProcessor.from_product()` as the one unit / axis bridge; tested against the vendored DHMConnect examples (`fc85f5c`); `MIRA_composition.py` moved to the attic — commits: `5771568`, `79d7091`, `0e84ba8`.

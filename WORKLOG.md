@@ -295,3 +295,14 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest tests/test_overlap.py`: 10 passed; full suite at the merge. Measured scatter (Office PC, 30 seeds, 128² px of 0.2 µm, 0.2 rad white noise): piston std 0.0021 rad, tilt std 0.00028 rad/µm (0.0019 without the LS refinement); with an independent 0.15 rad coherent pattern (corr 1 µm): 0.031 rad and 0.0034 rad/µm. Test tolerances ≈ 3 σ.
 - **Commits:** `87e841a` feat(registration): fit piston and tilt from the complex overlap [MI-21], plus the `docs(todo)` commit.
 - **Follow-ups:** the coherent pattern dominates the piston error between single tiles; the speckle study (MI-31, M4) quantifies it on real data.
+
+### 2026-11-18 22:42 CET — [MI-50] Target on the product grid
+- **Status:** done
+- **Changes:**
+  - `src/mira/targets.py` (new): `LayerTarget`, `TargetOnGrid`, `resample_target`
+  - `tests/test_targets.py` (new): 6 tests
+  - `tests/contracts/`: `LayerTarget`, `DeviationReport`, `ParameterSet`, `GroupSpec` examples added, `MANIFEST.json` updated (DHMConnect `fc85f5c`)
+  - `TODO.md`: MI-50 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest tests/test_targets.py`: 6 passed; full suite at the merge.
+- **Commits:** `96e7bb2` test(contracts): vendor LayerTarget, DeviationReport, ParameterSet, GroupSpec [MI-50], `f4d7140` feat(comparison): transfer a LayerTarget onto the product grid [MI-50], plus the `docs(todo)` commit.
+- **Follow-ups:** rotation / scale of the stage-to-image model enter with MI-11.
