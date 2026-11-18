@@ -326,3 +326,20 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest tests/test_deviation.py`: 7 passed; full suite at the merge.
 - **Commits:** `0cf5379` feat(comparison): compare a LayerProduct with its target [MI-52], plus the `docs(todo)` commit.
 - **Follow-ups:** final tolerances and monitor thresholds wait for M7.
+
+### 2026-11-18 22:47 CET — [MI-53] Stable entry point and report format
+- **Status:** done
+- **Changes:**
+  - `src/mira/api.py` (new): `evaluate_layer`, `SETTINGS_KEYS`
+  - `tests/test_api.py` (new): 5 tests
+  - `TODO.md`: MI-53 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest tests/test_api.py`: 4 passed, 1 skipped (no dhmconnect); with `DHMConnect/src` on `PYTHONPATH`: 5 passed (schema validation of the report).
+- **Commits:** `f513ef0` feat(api): add the stable entry point evaluate_layer [MI-53], plus the `docs(todo)` commit.
+- **Follow-ups:** nanofactorysystem T90 can now call the real evaluator.
+
+### 2026-11-18 22:47 CET — [Phase 5] Phase summary
+- **Status:** done (MI-50, MI-51, MI-52, MI-53)
+- **Changes:** see the entries above.
+- **Tests:** `python -m pytest` at the end of the phase: see the merge commit of MI-53 (all pass).
+- **Commits:** see the entries above.
+- **Follow-ups / to check with real data:** the comparison levels on the substrate of the target footprint — check on a real layer that the a-priori footprint and the measured structure line up (pose shift; MI-11 / MI-20); noise level sigma for the classification and the thresholds (M7); `phase_sign` against Sensofar / AFM once (G4).

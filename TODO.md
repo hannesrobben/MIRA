@@ -194,15 +194,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 5 — Target comparison
 
-- [ ] MI-53: Stable entry point and report format [phase: 5]
-  - Priority: high
-  - Size: M
-  - Depends on: MI-52
-  - Done when: `mira.api.evaluate_layer(product, target, context, settings) -> DeviationReport` exists;
-    the report is a header dictionary plus arrays with `schema_version`, `domain` and the computing
-    time; a test validates it against the shared example. This is what nanofactorysystem T90 calls on the
-    Work-PC (G6).
-
 ### Phase 6 — Integration
 
 - [ ] MI-60: Plug-in for the DHM service (G5-new) [phase: 6]
@@ -309,6 +300,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-53: Stable entry point and report format — 2026-11-18 — `mira.api.evaluate_layer(product, target, context, settings)` → `DeviationReport` 1.0 with `schema_version`, `domain`, `timings_s.evaluate`, optics and versions; checked against the shared example and the DHMConnect validator — commits: `f513ef0`.
 - [x] MI-52: Comparison — 2026-11-18 — `mira.deviation.compare` → `DeviationReport` 1.0: substrate levelling, deviation map, RMSE / MAE / sigma, per-segment statistics, ±k·sigma classification, validity flags; thresholds stay empty until M7 — commits: `0cf5379`.
 - [x] MI-51: Forward model — 2026-11-18 — `mira.forward`: K20 formulas mirrored with a parity test against OffAxisHolo, `Optics` with sources and no defaults, Δn calibration hook, automatic / fixed domain choice (M5 = OM4) — commits: `3faf360`.
 - [x] MI-50: Target on the product grid — 2026-11-18 — `mira.targets`: `LayerTarget` 1.0 and `resample_target` (pose shift + exact area-weighted downsampling, integral conserved, never upsamples); axis-aligned until MI-11 — commits: `96e7bb2`, `f4d7140`.
