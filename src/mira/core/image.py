@@ -459,34 +459,43 @@ class ImageData:
         file_title: Optional[str] = None,
     ) -> Path:
         """
-        Speichert die Daten als komprimierte .npz-Datei.
+        Save the data as a compressed ``.npz`` file.
 
-        Args:
-            save_path: Zielpfad, in dem die Datei gespeichert wird.
-            file_title: Optionaler Dateiname. Falls None, wird
-                        'masked_array.npz' verwendet.
+        A masked array is stored as two arrays, ``data`` and ``mask``; a
+        plain array is stored as ``data`` only.
 
-        Returns:
-            Path zur gespeicherten Datei.
+        Parameters
+        ----------
+        save_path : str or Path
+            Directory in which the file is saved. It is created if it does
+            not exist.
+        file_title : str, optional
+            File name. The extension ``.npz`` is appended if missing. If
+            None, ``masked_array.npz`` is used.
+
+        Returns
+        -------
+        Path
+            Path of the saved file.
         """
 
         save_path = Path(save_path)
 
-        # Zielordner erstellen, falls nicht vorhanden
+        # Create the target directory if it does not exist
         save_path.mkdir(parents=True, exist_ok=True)
 
-        # Standard-Dateiname
+        # Default file name
         if file_title is None:
             file_title = "masked_array"
 
-        # Korrekte Endung sicherstellen
+        # Make sure the extension is correct
         if not file_title.lower().endswith(".npz"):
             file_title += ".npz"
 
-        # Vollständigen Dateipfad erstellen
+        # Build the full file path
         file_path = save_path / file_title
 
-        # Speichern
+        # Save
         if isinstance(self.data, np.ma.MaskedArray):
             np.savez_compressed(
                 file_path,
