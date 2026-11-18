@@ -82,14 +82,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 0 — Baseline
 
-- [ ] MI-07: Python and NumPy baseline (follow-up of MI-02) [phase: 0]
-  - Priority: medium
-  - Size: S
-  - Depends on: – (M9 decided 2026-11-18)
-  - Done when: `requires-python >= 3.12`, classifiers 3.12 and 3.14, black's `target-version` and NumPy 2
-    follow M9; a fresh install of `.[dev]` passes `python -m pytest` on Python 3.12 and 3.14 (versions
-    and date in `WORKLOG.md`).
-
 - [ ] MI-04: Test baseline from the publication scripts (new baseline) [phase: 0]
   - Priority: high
   - Size: L
@@ -393,6 +385,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-07: Python and NumPy baseline — 2026-11-18 — `requires-python >= 3.12`, `numpy>=2.0`, classifiers 3.12 / 3.14, black `py312`; fresh `.[dev]` installs pass `python -m pytest` on CPython 3.12.3 and 3.14.10 (119 passed, 1 xfailed each) — commits: `7e6ecd7`.
 - [x] MI-01: Clean up the legacy copies — 2026-11-18 — Longer `plot_dual_profile` docstring taken over, then the approved list (M1) moved to the local attic (X-B) — commits: `dc176cd`, `2a4e995`.
 - [x] MI-08: Move the approved legacy files to the attic — 2026-11-18 — Conflict copy, 19 `*_old*` modules, `bland_altman_snippet.py`, the empty `tests/_test/test_dhm.py` and `todo_claude/` moved to the local, Git-ignored `attic/`; `docs/ATTIC_INDEX.md` lists original path and last commit; 119 tests pass — commits: `2a4e995`.
 - [x] MI-83: Refresh the system plan copy — 2026-11-18 — `docs/system/SOFTWARE_PLAN_OVERVIEW.md` is the unchanged copy of master v0.4 (X-D) — commits: `b611c4e`.
