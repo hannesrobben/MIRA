@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 MIRA ("Microscopy Image Registration & Analysis", package `mira`, src layout, Python 3.12) relates measured phase / height images of printed micro-structures to place and to the design. Today it is the analysis library behind the maintainer's DOE publication work: structure detection, segmentation, alignment, phase ↔ height conversion, refractive-index (Δn) calibration and statistics (regression, ensembles over prints, ICC, sensitivity, error vs. topology) with separate plotting.
 
-In the real-time feedback system it takes over four new tasks (see `TODO.md`):
+In the real-time feedback system (Release V1.0, master plan v0.4) it runs on **both PCs**: as a plug-in in worker processes of the DHMConnect service on the DHM-PC (registration, unwrapping per tile, levelling, fusion, stitching → `LayerProduct`) and on the Work-PC (`evaluate_layer`, offline analysis). Product types `TileProduct` / `LayerProduct` (M2) use `(y, x)` in µm at every boundary; the bridge to `StructureProcessor` converts in one place. It takes over four new tasks (see `TODO.md`):
 1. **Registration:** place products by their stage position and refine the placement in the image.
 2. **Speckle fusion:** combine captures of the same structure at shifted positions into one product with less speckle noise.
 3. **Stitching:** combine a raster of products into a mosaic of a structure larger than the DHM field of view.
@@ -41,10 +41,10 @@ black src tests                     # formatting (line length 88)
 - `core/`: `ImageData` (data, pixel size, profiles, resize, padding), `Structure` (mask, bounds, corners, `info` dict with ids via `set_info`, `statistics` dict via `add_statistic`), `Segment`, `Background` (incl. `erode_by_pixels`).
 - `processing/`: `detection.py`, `segmentation.py` (`segment_structure`, the implementation the processor uses; `Structure.segment()` is a duplicate, MI-71), `alignment.py`, `registration.py` (`RegistrationRefiner`, `NoRefinement`, `ECCRefinement`, `PhaseCorrelationRefinement`, `get_refiner`), `phase_retrieval.py` (phase ↔ height, unwrapping, background adjustment), `calibration.py` (`calculate_delta_n` → `DeltaNResult`, method registry, currently `"segment_mean"`).
 - `analysis/` (computation only): `segment_data.py` (shared segment statistics with edge erosion and background-relative values), `comparison.py` (`fit_linear_regression`, `fit_segment_regression` → `RegressionResult`), `ensemble.py` (records and pandas DataFrames over prints, `summarize_by_group`), `reliability.py` (`compute_icc`, ICC(1,1), ICC(2,1), ICC(3,1) with CI and F-test; `interpret_icc`), `sensitivity.py` (Δn uncertainty propagation and sweep), `topology.py` (error vs. gradient and curvature; expects pixel size in metres).
-- `visualization/` (plotting only): `plotter_2d.py`, `plotter_3d.py`, `plotter_stats.py`, `bland_altman.py` (former combined call as a wrapper around `analysis.comparison.bland_altman_compute` and `plotter_stats.plot_bland_altman`), `bland_altman_snippet.py` (re-export, attic candidate), `visualization_debug.py`.
+- `visualization/` (plotting only): `plotter_2d.py`, `plotter_3d.py`, `plotter_stats.py`, `bland_altman.py` (former combined call as a wrapper around `analysis.comparison.bland_altman_compute` and `plotter_stats.plot_bland_altman`), `visualization_debug.py`.
 - `utils/`: `exceptions.py` (`DataLoadError`, `ValidationError`, `ProcessingError`, `StructureError`, `SegmentationError`, `AlignmentError`, …), `helpers.py` (logger, conversions, geometry helpers), `serialization.py` (`to_json_safe`).
 - `MIRA_composition.py`: an unused sketch of a future data model (`ImageData` / `Structure` / `Measurement` / `Processor`).
-- Legacy copies, not the active path: `*_old.py`, `*_old<n>.py`, `processor_old^1.py`, and the Seafile conflict copy `visualization/plotter_2d (SFConflict … 2026-10-06-15-55-59).py`. They are committed (`254b25e`) and move to `attic/` only after the maintainer approves the list (MI-01).
+- Legacy copies (`*_old*.py`, the Seafile conflict copy of `plotter_2d.py`, `bland_altman_snippet.py`) moved on 2026-11-18 to the local, Git-ignored `attic/` (M1, procedure X-B); `docs/ATTIC_INDEX.md` lists original path and last commit for restoring with `git show`.
 - Import weight: `import mira` loads neither OpenCV, matplotlib nor pandas (MI-05, checked by `tests/test_import_hygiene.py`). Import them inside the function that uses them; `processor._CV2_INTER_LINEAR` mirrors `cv2.INTER_LINEAR` for a default argument.
 - Known pitfall (audited in MI-77): `x.data if hasattr(x, "data") else x`, and `np.asarray`, unmask a `numpy.ma.MaskedArray`; check for ndarray / MaskedArray first and use `.data` only for wrapper objects such as `ImageData`.
 - Known bug (MI-79): `ECCRefinement` returns the inverse warp; `PhaseCorrelationRefinement` is correct. The fix waits for the maintainer.
@@ -69,7 +69,7 @@ Rules that follow from this:
 
 ## Repository rules
 
-1. Nothing is deleted. Old copies move to `attic/` only after the maintainer approves the list (MI-01).
+1. Nothing is deleted. Files that leave the active code move to the local `attic/` only after the maintainer approves, and are listed in `docs/ATTIC_INDEX.md` (X-B).
 2. Fix problems at their source, not downstream. Prefer a validation error over a silent fallback.
 3. Every geometric transform of a processor goes through `apply_affine_transform`; raw channels, masks and segments are transformed together.
 4. Computation and plotting stay separate (`mira.analysis`, `mira.processing` against `mira.visualization`). `import mira` must not import matplotlib (MI-05). New analyses follow the pattern compute function → result dataclass (in `analysis/`) + plot function (in `visualization/plotter_stats.py`).
@@ -191,7 +191,7 @@ If a task does not meet this, mark it `partial` in the log and describe the rema
   If a test reveals a real bug, fix it in a separate `fix:` commit if the fix is small and clear.
   Otherwise, mark the test `xfail(reason=..., strict=True)` and add a todo.
 - Tests write only to `tmp_path`.
-- Never modify the legacy copies (`*_old*.py`, the conflict copy).
+- Never modify the legacy copies (in the local `attic/`).
 
 ## Current Status
 <!-- Maintained exclusively by the status review routine. Claude Code reads it, never edits it. -->

@@ -221,3 +221,26 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
   into documentation), the legacy copies, the cited German title in `docs/system/SOFTWARE_PLAN_OVERVIEW.md`.
   The cross-repository overview of this session lives outside the repository in
   `../_system/` (ERRORS.md, DUPLICATE_CODE.md, DECISIONS.md, …).
+
+### 2026-11-18 17:42 CET — [MI-01, MI-08, X-C] Attic move of the approved legacy files
+- **Status:** done
+- **Changes:**
+  - `src/mira/visualization/plotter_2d.py`: longer `plot_dual_profile` docstring from the conflict copy (M1)
+  - `.gitignore`: ignore `attic/` (X-B)
+  - `docs/ATTIC_INDEX.md` (new): original path, last commit, date and reason of every moved file
+  - `docs/ATTIC_REVIEW.md`: status approved and executed
+  - `src/mira/core/image_old.py`, `src/mira/core/structure_old.py`, `src/mira/processing/alignment_old.py`, `alignment_old1.py`, `alignment_old2.py`, `alignment_old3.py`, `detection_old.py`, `phase_retrieval_old.py`, `phase_retrieval_old1.py`, `phase_retrieval_old2.py`, `src/mira/processor_old.py`, `processor_old2.py`, `processor_old3.py`, `processor_old4.py`, `processor_old5.py`, `processor_old^1.py`, `src/mira/visualization/plotter_2d_old.py`, `plotter_2d_old1.py`, `plotter_2d_old2.py`, `src/mira/visualization/plotter_2d (SFConflict … 2026-10-06-15-55-59).py`, `src/mira/visualization/bland_altman_snippet.py`, `tests/_test/test_dhm.py`, `todo_claude/00_SOFTWARE_PLAN_OVERVIEW.md`, `todo_claude/04_MIRA_PLAN.md`, `todo_claude/CLAUDE.md` (removed from Git with `git rm --cached`, moved to the local `attic/` at the same relative path)
+- **Tests:** `python -m pytest` before and after: 119 passed, 1 xfailed.
+- **Commits:** `dc176cd` docs(visualization): keep the longer plot_dual_profile docstring [MI-01], `2a4e995` chore(attic): move approved legacy files to the local attic [MI-08], merged with `b733af2`; before that `6eb6798` merged `docs/translate-german` (X-J).
+- **Follow-ups:** none.
+
+### 2026-11-18 17:42 CET — [X-D, MI-04, MI-10] Revision after the decision session 2026-11-18
+- **Status:** done
+- **Changes:**
+  - `docs/system/SOFTWARE_PLAN_OVERVIEW.md`: unchanged copy of master v0.4
+  - `TODO.md`: phase plan, "Open decisions" (M7, M10, M11 deferred), new table "Decided", rewritten MI-04, MI-07, MI-10, MI-11, MI-20, MI-21, MI-30, MI-31, MI-40, MI-41, MI-50–MI-53, MI-60, MI-61, MI-79; new MI-82; MI-01, MI-08, MI-83 done
+  - `CLAUDE.md`: legacy copies in the local attic, role on both PCs after G5-new
+  - `WORKLOG.md`: these entries
+- **Tests:** none (documentation only); the full suite ran after the attic move (119 passed, 1 xfailed).
+- **Commits:** `b611c4e` docs(system): copy master plan v0.4 unchanged [X-D], `8439a2d` docs(todo): derive the todos from the decisions of 2026-11-18, plus the `docs(todo)` commit of this entry.
+- **Follow-ups:** MI-04 starts by asking the maintainer which data to use (with a proposal).
