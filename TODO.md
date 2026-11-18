@@ -125,14 +125,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
     - returns transform and a confidence value; low confidence falls back to the stage position and is
       flagged; tested on MI-22 fields.
 
-- [ ] MI-21: Phase offset and tilt between products [phase: 2]
-  - Priority: high
-  - Size: M
-  - Depends on: MI-22
-  - Done when: a robust estimate of piston (angle of Σ U_new · conj(U_ref) over the complex overlap) and
-    linear phase terms from the overlap of two products is tested on MI-22 fields; it is the **one**
-    implementation used by fusion (MI-30) and stitching (MI-40).
-
 ### Phase 3 — Speckle fusion
 
 - [ ] MI-30: Fusion of a speckle set (M3, M4) [phase: 3]
@@ -344,6 +336,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-21: Phase offset and tilt between products — 2026-11-18 — `mira.overlap.fit_piston_tilt`: tilt from neighbour increments + one weighted LS pass, piston as angle of Σ U_new·conj(U_ref) at a stated centre, residual / coherence for flags; `overlap_slices` for mosaics; tolerances measured over 30 seeds on MI-22 fields — commits: `87e841a`.
 - [x] MI-22: Synthetic test fields — 2026-11-18 — `mira.synthetic`: analytic scene sampled exactly at any sub-pixel position, known piston / tilt / stage error, white + camera-fixed coherent noise (M4 model); tolerances stated in the tests, final ones wait for M7 — commits: `aaa3085`.
 - [x] MI-10: Product data model `TileProduct` / `LayerProduct` (M2) — 2026-11-18 — `mira.products` with immutable, backend-neutral `TileProduct` (↔ `ProductSet` 1.0, complex field as input, grid centred on the actual stage position) and `LayerProduct` (↔ `LayerProduct` 1.0, HDF5 `header_json` + one dataset per buffer), `StructureProcessor.from_product()` as the one unit / axis bridge; tested against the vendored DHMConnect examples (`fc85f5c`); `MIRA_composition.py` moved to the attic — commits: `5771568`, `79d7091`, `0e84ba8`.
 - [x] MI-02: Packaging — 2026-11-18 — Static dependencies only, extras `viz` / `analysis` / `dev`, pandas declared, author and description set; the last criterion (fresh editable install + tests) was met with the MI-07 baseline on 3.12 and 3.14 — commits: `4280aec`, `91c2cd5`, `7e6ecd7`.
