@@ -1,0 +1,72 @@
+{
+  "message_type": "DeviationReport",
+  "schema_version": "1.0",
+  "report_id": "dev-000017",
+  "target_id": "tgt-pillar_03-L004",
+  "product_id": "lp-000017",
+  "domain": "height",
+  "grid": {
+    "origin_um": [
+      800.0,
+      1150.0
+    ],
+    "pixel_um": [
+      0.1738,
+      0.1738
+    ],
+    "shape": [
+      600,
+      600
+    ]
+  },
+  "stats": {
+    "rmse": 0.12,
+    "mae": 0.09,
+    "sigma": 0.11,
+    "mean": 0.02,
+    "n_valid": 250000,
+    "valid_fraction": 0.69
+  },
+  "registration": {
+    "matrix": [
+      [
+        1.0,
+        0.0,
+        0.03
+      ],
+      [
+        0.0,
+        1.0,
+        -0.01
+      ]
+    ],
+    "method": "stage_prior",
+    "residual": null
+  },
+  "source": "nanofactorysystem.feedback",
+  "versions": {
+    "mira": "0.3.0"
+  },
+  "warnings": [],
+  "buffers": [
+    {
+      "name": "deviation_um",
+      "dtype": "float32",
+      "shape": [
+        600,
+        600
+      ],
+      "byte_order": "little"
+    },
+    {
+      "name": "valid",
+      "dtype": "uint8",
+      "shape": [
+        600,
+        600
+      ],
+      "byte_order": "little"
+    }
+  ],
+  "created_utc": "2026-11-18T09:12:21Z"
+}

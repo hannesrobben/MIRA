@@ -6,12 +6,20 @@
     "ProductSet": "1.0",
     "LayerProduct": "1.0",
     "ReconstructionResult": "1.0",
-    "CaptureContext": "1.0"
+    "CaptureContext": "1.0",
+    "LayerTarget": "1.0",
+    "DeviationReport": "1.0",
+    "ParameterSet": "0.1",
+    "GroupSpec": "1.0"
   },
   "files": {
     "ProductSet.example.json": "eb362f08916e0392dbdfd6e99acbf12c6563db1ce1e271a6a4821734f33b653a",
     "LayerProduct.example.json": "fb140451f128506c6525d1edb2035c2d1dcc93fc1a477ed5618448cda2ab3af9",
     "ReconstructionResult.example.json": "0ffa0dac970c66679ddf3e5f76c797a4eec074c169a6730ad61d173d70d495b9",
-    "CaptureContext.example.json": "4589558be400a02de9c75b3a26b258e8daa790b508a2204b19c2a5a2666420b3"
+    "CaptureContext.example.json": "4589558be400a02de9c75b3a26b258e8daa790b508a2204b19c2a5a2666420b3",
+    "LayerTarget.example.json": "671757111492ddd76ade3f5df324f8ea4e4b11340c52f73cc9a2f37c531c7080",
+    "DeviationReport.example.json": "d2a67e407912c271f89294812aca7e74289bd9dcfc9d4e265a14f6460ca1b03d",
+    "ParameterSet.example.json": "5eba2651bcb5213abc1217decf6a2e18405cdce125e605ab2d197e0cc2debcd7",
+    "GroupSpec.example.json": "ee065746b8f4996089d2dfe2e9df2fcc18da30f30150c9f6d298f13304b4d627"
   }
 }

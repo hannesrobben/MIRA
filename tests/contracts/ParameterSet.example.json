@@ -1,0 +1,53 @@
+{
+  "message_type": "ParameterSet",
+  "schema_version": "0.1",
+  "parameter_set_id": "zeiss63x-insitu-v1",
+  "name": "Zeiss 63x in-situ (SZ2080)",
+  "description": "Provisional 63x set; z = -2.6 um at n = 1.0 until the focus study K10.",
+  "created_utc": "2026-11-18T10:00:00Z",
+  "config_hash": "af2c68e689d640b9bbfd8f9e0cdaa6923aab578f591682466bbd4bdf5ec8a38f",
+  "camera": {
+    "name": "Basler acA1920-155um",
+    "sensor_pixel_um": [
+      5.86,
+      5.86
+    ],
+    "roi_offset_px": [
+      88,
+      438
+    ],
+    "roi_shape_px": [
+      1024,
+      1024
+    ],
+    "bit_depth": 8,
+    "exposure_us": 16800
+  },
+  "objective": {
+    "name": "Zeiss 63x Femtika",
+    "magnification": 63,
+    "na": 1.4,
+    "pixel_um": [
+      0.0869,
+      0.0869
+    ]
+  },
+  "reconstruction": {
+    "z_um": -2.6,
+    "propagation_index": 1.0,
+    "order_calibration": null,
+    "mask": {
+      "shape": "circle",
+      "size_px": 128
+    },
+    "crop_px": 512,
+    "eps_rel": 0.001,
+    "precision": "double",
+    "unwrap": "fast2d"
+  },
+  "phase_sign": 1,
+  "wavelength_um": 0.674994,
+  "n_surround": 1.508,
+  "optical_margin_um": 2.0,
+  "min_reference_fraction": 0.05
+}
