@@ -275,3 +275,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest` (`.venv`, CPython 3.12.3, h5py 3.16.0 installed for the HDF5 test): 133 passed, 1 xfailed (was 119 + 1).
 - **Commits:** `5771568` feat(products): add TileProduct / LayerProduct per contracts 1.0 [MI-10], `79d7091` test(products): check the product types against vendored contracts [MI-10], `0e84ba8` chore(attic): move MIRA_composition.py to the local attic [MI-10], plus the `docs(todo)` commit of this entry.
 - **Follow-ups:** the place and layout of a `LayerProduct` in `experiment.h5` is proposed here (`header_json` attribute + one dataset per buffer) and noted for nanofactorysystem T83; the tile grid is axis-aligned and centred on the actual stage position until MI-11.
+
+### 2026-11-18 22:38 CET — [MI-22] Synthetic test fields
+- **Status:** done
+- **Changes:**
+  - `src/mira/synthetic.py` (new): `Feature`, `SyntheticScene`, `SpeckleNoise`, `SyntheticTile`, `make_tile`
+  - `tests/test_synthetic.py` (new): 7 tests
+  - `TODO.md`: MI-22 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: all pass (see the merge); new file 7 passed.
+- **Commits:** `aaa3085` feat(synthetic): add synthetic DHM fields with known ground truth [MI-22], plus the `docs(todo)` commit.
+- **Follow-ups:** none; final tolerances follow M7.

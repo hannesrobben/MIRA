@@ -114,14 +114,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 2 — Registration
 
-- [ ] MI-22: Synthetic test fields [phase: 2]
-  - Priority: high
-  - Size: S
-  - Depends on: MI-10
-  - Done when:
-    - a generator produces fields with known shift, piston, tilt and speckle-like noise; used by MI-20,
-      MI-21, MI-30, MI-40; final tolerances follow M7.
-
 - [ ] MI-20: Registration by position and image [phase: 2]
   - Priority: high
   - Size: L
@@ -352,6 +344,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-22: Synthetic test fields — 2026-11-18 — `mira.synthetic`: analytic scene sampled exactly at any sub-pixel position, known piston / tilt / stage error, white + camera-fixed coherent noise (M4 model); tolerances stated in the tests, final ones wait for M7 — commits: `aaa3085`.
 - [x] MI-10: Product data model `TileProduct` / `LayerProduct` (M2) — 2026-11-18 — `mira.products` with immutable, backend-neutral `TileProduct` (↔ `ProductSet` 1.0, complex field as input, grid centred on the actual stage position) and `LayerProduct` (↔ `LayerProduct` 1.0, HDF5 `header_json` + one dataset per buffer), `StructureProcessor.from_product()` as the one unit / axis bridge; tested against the vendored DHMConnect examples (`fc85f5c`); `MIRA_composition.py` moved to the attic — commits: `5771568`, `79d7091`, `0e84ba8`.
 - [x] MI-02: Packaging — 2026-11-18 — Static dependencies only, extras `viz` / `analysis` / `dev`, pandas declared, author and description set; the last criterion (fresh editable install + tests) was met with the MI-07 baseline on 3.12 and 3.14 — commits: `4280aec`, `91c2cd5`, `7e6ecd7`.
 - [x] MI-07: Python and NumPy baseline — 2026-11-18 — `requires-python >= 3.12`, `numpy>=2.0`, classifiers 3.12 / 3.14, black `py312`; fresh `.[dev]` installs pass `python -m pytest` on CPython 3.12.3 and 3.14.10 (119 passed, 1 xfailed each) — commits: `7e6ecd7`.
