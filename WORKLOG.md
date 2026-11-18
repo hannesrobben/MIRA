@@ -244,3 +244,11 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** none (documentation only); the full suite ran after the attic move (119 passed, 1 xfailed).
 - **Commits:** `b611c4e` docs(system): copy master plan v0.4 unchanged [X-D], `8439a2d` docs(todo): derive the todos from the decisions of 2026-11-18, plus the `docs(todo)` commit of this entry.
 - **Follow-ups:** MI-04 starts by asking the maintainer which data to use (with a proposal).
+
+### 2026-11-18 21:55 CET — [MI-07] Python and NumPy baseline
+- **Status:** done
+- **Changes:**
+  - `pyproject.toml`: `requires-python >= 3.12` (was 3.10), classifiers 3.12 / 3.14, `numpy>=2.0`, black `target-version = ["py312"]`
+- **Tests:** fresh venvs on the Office PC, 2026-11-18, `pip install -e ".[dev]"` then `python -m pytest`: CPython 3.12.3 (`%LOCALAPPDATA%\Temp\mira312`, NumPy 2.5.5, pandas 3.1.1, matplotlib 3.11.2) 119 passed, 1 xfailed; CPython 3.14.10 (`%LOCALAPPDATA%\Temp\mira314`) 119 passed, 1 xfailed (the install builds one dependency from source and took several minutes).
+- **Commits:** `7e6ecd7` build(packaging): require Python 3.12 and NumPy 2 (M9) [MI-07]
+- **Follow-ups:** `dev` still installs both black and yapf (ERRORS MI-E12, not part of M9); the self-referencing `mira[viz,analysis]` extra resolved fine with pip 24.0 (compare DHMConnect DL-A9).
