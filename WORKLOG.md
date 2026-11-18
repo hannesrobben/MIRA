@@ -252,3 +252,12 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** fresh venvs on the Office PC, 2026-11-18, `pip install -e ".[dev]"` then `python -m pytest`: CPython 3.12.3 (`%LOCALAPPDATA%\Temp\mira312`, NumPy 2.5.5, pandas 3.1.1, matplotlib 3.11.2) 119 passed, 1 xfailed; CPython 3.14.10 (`%LOCALAPPDATA%\Temp\mira314`) 119 passed, 1 xfailed (the install builds one dependency from source and took several minutes).
 - **Commits:** `7e6ecd7` build(packaging): require Python 3.12 and NumPy 2 (M9) [MI-07]
 - **Follow-ups:** `dev` still installs both black and yapf (ERRORS MI-E12, not part of M9); the self-referencing `mira[viz,analysis]` extra resolved fine with pip 24.0 (compare DHMConnect DL-A9).
+
+### 2026-11-18 22:30 CET — [MI-02] Close the packaging todo
+- **Status:** done
+- **Changes:**
+  - `TODO.md`: MI-02 moved from "In Progress" to "Done"; its only remaining criterion (Python / NumPy baseline) was met by MI-07
+  - `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest` (`.venv`, CPython 3.12.3): 119 passed, 1 xfailed.
+- **Commits:** see the `docs(todo)` commit of this entry.
+- **Follow-ups:** none.
