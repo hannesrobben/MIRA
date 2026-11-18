@@ -55,8 +55,12 @@ viz = [
 analysis = [
     "pandas",
 ]
+# Reading / writing products in experiment.h5 (LayerProduct.from_h5 / to_h5).
+io = [
+    "h5py",
+]
 dev = [
-    "mira[viz,analysis]",
+    "mira[viz,analysis,io]",
     "pytest",
     "black",
     "yapf",

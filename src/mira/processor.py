@@ -160,6 +160,32 @@ class StructureProcessor:
         self.segmentation_method = segmentation_method
         self.structure_detection_method = structure_detection_method
 
+    @classmethod
+    def from_product(cls, product, *, n_resin: float, **kwargs) -> "StructureProcessor":
+        """Create a processor from a DHM product (MI-10, decision M2).
+
+        Thin wrapper around :func:`mira.products.to_structure_processor`, the
+        one place that converts ``(y, x)`` µm to ``(x, y)`` metres.
+
+        Parameters
+        ----------
+        product : mira.products.TileProduct or mira.products.LayerProduct
+            The product; a tile gives the wrapped phase, a layer the
+            unwrapped one.
+        n_resin : float
+            Refractive index for phase → height; required (no silent
+            default, G7).
+        **kwargs
+            Passed on to :func:`mira.products.to_structure_processor`.
+
+        Returns
+        -------
+        StructureProcessor
+        """
+        from .products import to_structure_processor
+
+        return to_structure_processor(product, n_resin=n_resin, **kwargs)
+
     @property
     def _active_data(self) -> ImageData:
         """
