@@ -1,10 +1,13 @@
 # Attic review (MI-01)
 
-Status: proposal, waiting for the maintainer (decision M1). Nothing has been moved yet.
+Status: approved 2026-11-18 (decision M1, decision session 2026-11-17/18). Executed 2026-11-18.
 
-Once the maintainer approves the list below (completely or in part), the approved files move to
-`attic/` in one commit with `git mv`, keeping their relative path (for example
-`src/mira/processor_old.py` → `attic/src/mira/processor_old.py`). Nothing is deleted.
+All files of §1–§3 and `tests/_test/test_dhm.py` (§4) moved to the local `attic/` folder, keeping their
+relative path (for example `src/mira/processor_old.py` → `attic/src/mira/processor_old.py`). Per decision
+X-B the attic is not on GitHub: the files were removed from Git with `git rm --cached`, and
+`docs/ATTIC_INDEX.md` lists every original path with its last commit for restoring. Nothing is deleted.
+The longer docstring of `plot_dual_profile` (§1) was taken into `plotter_2d.py` first.
+`src/mira/MIRA_composition.py` stays until the product model MI-10 is designed (decision M2).
 
 ## 1. Seafile conflict copy
 

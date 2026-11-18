@@ -47,3 +47,6 @@ Thumbs.db
 
 
 MIRA_tree.txt
+# Local attic (decision X-B, 2026-11-18): moved legacy files, not on GitHub.
+# docs/ATTIC_INDEX.md lists original path and last commit for restoring.
+attic/

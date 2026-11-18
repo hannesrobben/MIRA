@@ -447,8 +447,8 @@ def plot_image_with_profile(
         heatmap_figsize:      Figure size of the heatmap.
         profile_figsize:      Figure size of the profile plot.
         dpi:                   Resolution used when saving either plot.
-        save_path_heatmap:    Optional path to save the heatmap to.
-        save_path_profile:    Optional path to save the profile plot to.
+        save_path_heatmap:    Optional path to save the heatmap to. Has to be with heatmap name. (.png)
+        save_path_profile:    Optional path to save the profile plot to. Has to be with profile name. (.png)
         show_plot:             If True, call `plt.show()` before returning.
 
     Returns:
