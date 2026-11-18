@@ -1,0 +1,75 @@
+{
+  "message_type": "CaptureContext",
+  "schema_version": "1.0",
+  "experiment_uuid": "6b1f3c1e-2d4a-4f7e-9c0a-1b2c3d4e5f60",
+  "experiment_label": "pillars_63x_2026-11-18",
+  "substrate_id": "S-0042",
+  "session_id": "1",
+  "structure_id": "pillar_03",
+  "phase": "in_situ",
+  "layer_index": 4,
+  "capture_id": "L004-C012",
+  "image_index": 12,
+  "group_id": "grp-0007",
+  "tile_index": 3,
+  "position_commanded_um": {
+    "x": 1200.0,
+    "y": 850.0,
+    "z": 32.5
+  },
+  "position_actual_um": {
+    "x": 1200.02,
+    "y": 849.98,
+    "z": 32.5
+  },
+  "occupied_um": [
+    [
+      [
+        840.0,
+        1190.0
+      ],
+      [
+        840.0,
+        1210.0
+      ],
+      [
+        860.0,
+        1210.0
+      ],
+      [
+        860.0,
+        1190.0
+      ]
+    ]
+  ],
+  "occupied_raster": null,
+  "pose_tolerance_um": 1.5,
+  "material": {
+    "material_id": "sz2080",
+    "name": "SZ2080",
+    "registry_version": "1",
+    "wavelength_nm": 674.994,
+    "states": {
+      "uncured": {
+        "n": 1.508,
+        "source": "maintainer measurement 2026"
+      },
+      "cured_in_resin": {
+        "n": 1.52,
+        "source": "maintainer measurement 2026"
+      },
+      "cured_developed": {
+        "n": 1.52,
+        "source": "maintainer measurement 2026, checked against air"
+      }
+    }
+  },
+  "n_structure": 1.52,
+  "n_surround": 1.508,
+  "propagation_index": 1.508,
+  "z_hint": {
+    "kind": "experiment_focus",
+    "z_um": -2.4
+  },
+  "created_utc": "2026-11-18T09:12:03.100Z"
+}

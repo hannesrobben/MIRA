@@ -1,0 +1,17 @@
+{
+  "source": "dhmconnect.schemas",
+  "dhmconnect_version": "0.1.0.dev0",
+  "dhmconnect_commit": "fc85f5c",
+  "schema_versions": {
+    "ProductSet": "1.0",
+    "LayerProduct": "1.0",
+    "ReconstructionResult": "1.0",
+    "CaptureContext": "1.0"
+  },
+  "files": {
+    "ProductSet.example.json": "eb362f08916e0392dbdfd6e99acbf12c6563db1ce1e271a6a4821734f33b653a",
+    "LayerProduct.example.json": "fb140451f128506c6525d1edb2035c2d1dcc93fc1a477ed5618448cda2ab3af9",
+    "ReconstructionResult.example.json": "0ffa0dac970c66679ddf3e5f76c797a4eec074c169a6730ad61d173d70d495b9",
+    "CaptureContext.example.json": "4589558be400a02de9c75b3a26b258e8daa790b508a2204b19c2a5a2666420b3"
+  }
+}
