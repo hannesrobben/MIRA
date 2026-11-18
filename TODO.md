@@ -125,6 +125,9 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
     - the bridge `StructureProcessor.from_product()` converts µm → m and `(y, x)` → `(x, y)` in exactly one
       place; `StructureProcessor` is unchanged;
     - `MIRA_composition.py` is reviewed while designing and then moved to the attic (X-B).
+  - Contracts available 2026-11-18: DHMConnect `fc85f5c` (DL-A3): `ProductSet`, `LayerProduct`,
+    `LayerTarget`, `DeviationReport` with examples (`DHMConnect/docs/CONTRACTS.md`); vendor with
+    `python -m dhmconnect.schemas.export tests/contracts --commit fc85f5c`.
 
 - [ ] MI-11: Stage-to-image geometry [phase: 1]
   - Priority: medium
