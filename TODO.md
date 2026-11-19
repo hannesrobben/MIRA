@@ -104,40 +104,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 3 — Speckle fusion
 
-- [ ] MI-30: Fusion of a speckle set (M3, M4) [phase: 3]
-  - Priority: high
-  - Size: L
-  - Depends on: MI-20, MI-21
-  - Done when:
-    - the pipeline shared with MI-40 registers, equalises piston / tilt (MI-21) and averages in the
-      **complex field** with implicit amplitude weighting and an optional quality weight per capture;
-      count and validity per pixel (`min_count`); returns the fused `LayerProduct`, the transform of every
-      member and the noise in the reference region before and after;
-    - a configuration for small structures (≥ 9 positions around the centre, `single_shot` allowed) and
-      a comparison of the phase median (noise in the substrate, edge sharpness) on synthetic data exist;
-    - all parameters are configurable with the start values of nanofactorysystem T85.
-
 ### Phase 4 — Stitching
-
-- [ ] MI-40: Stitching (G10 SA6) [phase: 4]
-  - Priority: high
-  - Size: L
-  - Depends on: MI-20, MI-21
-  - Done when the maintainer's algorithm runs on a synthetic raster:
-    - order: first a ring of tiles with ≈ 50 % substrate (each anchored to the substrate), then inwards;
-      the tile measured before is ground truth;
-    - a border band of every tile is discarded after propagation (width a parameter; estimate
-      |z| · tan θ_max with sin θ_max = NA / n);
-    - **unwrapping per tile before stitching** (OffAxisHolo K11 helper, `fast2d` default): piston from the
-      complex overlap, integer k · 2π from the unwrapped difference, consistency check (constant
-      difference, otherwise flag the tile / guided unwrapping);
-    - a final global least-squares adjustment of all overlaps with the ring tiles as absolute anchors;
-      tiles without substrate are anchored through the overlaps and the anchor is recorded per tile
-      (`reference_source` / `reference_fraction` per tile, SA4);
-    - output `LayerProduct` with mosaic, tiles, transforms, residuals; works incrementally (tile by
-      tile, MI-60); a tile may itself be a fused speckle set;
-    - note for K11-T (OffAxisHolo `docs/realtime/unwrapping_comparison.md`): store spatial and, once
-      available, temporal results per layer during the study.
 
 - [ ] MI-41: Detection and fit of the calibration marks (G10 SA2) [phase: 4]
   - Priority: high
@@ -150,6 +117,14 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
       residuals;
     - the result feeds the calibration file of T104 and the model of MI-11; residual shifts of MI-40 can
       refine it later; tested on synthetic marks.
+
+- [ ] MI-43: A-posteriori reference mask from detection (G10 SA4, found during MI-40) [phase: 4]
+  - Priority: medium
+  - Size: S
+  - Depends on: –
+  - Done when: when a tile has no a-priori `occupied_um`, `mira.mosaic` derives the reference region from
+    MIRA's structure detection on the tile (`reference_source = "mask_a_posteriori"`) before falling back to
+    `whole_field` with `reference_fraction = 0`; tested on MI-22 fields; the a-priori mask stays the default.
 
 - [ ] MI-42: Size limits [phase: 4]
   - Priority: low
@@ -265,6 +240,8 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-40: Stitching (G10 SA6) — 2026-11-19 — `MosaicConfig.stitching()`: border band, registration against the earlier tile (partial along straight edges), unwrapping per tile with k·2π and consistency flag, global LS piston adjustment with substrate anchors, incremental `MosaicBuilder` → `LayerProduct` — commits: `810784f`, `96a0447`.
+- [x] MI-30: Fusion of a speckle set (M3, M4) — 2026-11-19 — `MosaicConfig.fusion()` of the shared `mira.mosaic` pipeline: registration (stage prior), piston / tilt (MI-21), complex weighted mean with count / `min_count`, noise before / after in the product; mean vs median compared on synthetic data — commits: `810784f`, `96a0447`.
 - [x] MI-31: Noise metrics — 2026-11-19 — `mira.noise`: reference-region noise (plane / piston detrend, complex input), radial PSD, correlation length, LS fit of the M4 model σ² = σt²/(Nf·Np) + σcoh²/Np and `positions_needed` — commits: `0d93431`.
 - [x] MI-20: Registration by position and image — 2026-11-19 — `mira.register.register_pair`: stage prior + phase correlation restricted to the pose tolerance (excludes the optics-fixed pattern peak), spectral low-pass, sub-pixel upsampled DFT, two passes; confidence with stage fallback and flag — commits: `1e1c3b4`.
 - [x] MI-11: Stage-to-image geometry — 2026-11-19 — `mira.geometry.StageToImage` (affine J + offset per objective and device), nominal fallback with caller-stated tolerance, LS fit from mark observations (3 × 3 raster independent of the galvo scale), proposed `StageImageCalibration` 1.0 file; nanofactorysystem `Transform` convertible via `from_xy_matrix` — commits: `7550d4f`.

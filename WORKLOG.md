@@ -373,3 +373,15 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: 202 passed, 2 skipped, 1 xfailed.
 - **Commits:** `0d93431` feat(analysis): add shared noise metrics and the M4 noise model [MI-31], plus the `docs(todo)` commit.
 - **Follow-ups:** MI-75 replaces `radial_psd` by a wrapper around OffAxisHolo P15; OffAxisHolo K13 should report its N-study with `mira.noise.reference_noise` when MIRA is available (note in OffAxisHolo K13).
+
+### 2026-11-19 08:24 CET — [MI-30] [MI-40] Fusion and stitching (one pipeline, M4)
+- **Status:** done
+- **Changes:**
+  - `src/mira/register.py`: structure-tensor isotropy with partial registration along undetermined directions (straight edges), estimate with half whitening and 1 px low-pass, confidence from classic phase correlation; `min_isotropy` required (BREAKING for `register_pair`)
+  - `tests/test_register.py`: `min_isotropy` in all calls, new edge-only test
+  - `src/mira/mosaic.py` (new): `MosaicConfig.fusion()` / `.stitching()`, incremental `MosaicBuilder` (`add_tile` / `close`), `build_mosaic`, `mosaic_grid`, `rasterise_polygons`, `border_band_estimate_um`
+  - `tests/test_mosaic.py` (new): 8 tests
+  - `TODO.md`: MI-30 and MI-40 to Done, new MI-43; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 211 passed, 2 skipped, 1 xfailed. Measured on MI-22 fields (Office PC): fusion 9 positions × 10 frames, 0.2 rad white + 0.2 rad coherent: tile noise 0.20 → 0.11 rad (M4 model for full coverage: 0.07 rad); complex mean vs phase median: lower noise, edge width 0.8 vs 1.4 µm. Stitching 3 × 3 raster, 9 rad plateau: no 2π errors, error std < 0.2 rad. Registration: edge normal < 0.01 µm rms (before: 0.13 µm); isotropy 0.002–0.004 (edges) vs 0.44–0.61 (2-D scenes); confidence 0.055 (featureless) vs ≥ 0.35.
+- **Commits:** `810784f` feat(registration): handle edge-only overlaps and noisy fields [MI-30], `96a0447` feat(stitching): one incremental pipeline for fusion and stitching [MI-30] [MI-40], plus the `docs(todo)` commit.
+- **Follow-ups:** MI-43 (a-posteriori reference mask); along an undetermined edge direction the stage error remains (measure `pose_tolerance_um`, T104); `min_confidence` / `min_isotropy` / `consistency_max_fraction` are start values for tests until M7 / K11-T; K11-T study should store spatial and temporal results per layer (note kept in MI-40 text, no temporal option yet); MI-60 maps the `GroupSpec` stitching block (`border_band_um`, `min_overlap_um`, `unwrap`) onto `MosaicConfig`.
