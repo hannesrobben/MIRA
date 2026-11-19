@@ -100,18 +100,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 1 — Products and geometry
 
-- [ ] MI-11: Stage-to-image geometry [phase: 1]
-  - Priority: medium
-  - Size: M
-  - Depends on: MI-10
-  - Done when:
-    - a model maps stage micrometres to product pixels (rotation, scale, shear, axis flips, offset) per
-      objective and per camera / DHM; it loads the versioned calibration file of nanofactorysystem T104
-      (id, date, residuals) and falls back to rotation 0 and the nominal pixel size with a generous
-      tolerance when none exists;
-    - `tools/Transform` of nanofactorysystem (camera case) is reviewed for reuse;
-    - partial result allowed: model and estimation on synthetic data; the real calibration needs captures.
-
 ### Phase 2 — Registration
 
 - [ ] MI-20: Registration by position and image [phase: 2]
@@ -294,12 +282,12 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 ## In Progress
 <!-- Claude Code moves a todo here when starting work. -->
 
-
 ## Blocked
 <!-- Format: todo as above, plus the line "Blocked by: <reason or ID>". -->
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-11: Stage-to-image geometry — 2026-11-19 — `mira.geometry.StageToImage` (affine J + offset per objective and device), nominal fallback with caller-stated tolerance, LS fit from mark observations (3 × 3 raster independent of the galvo scale), proposed `StageImageCalibration` 1.0 file; nanofactorysystem `Transform` convertible via `from_xy_matrix` — commits: `7550d4f`.
 - [x] MI-53: Stable entry point and report format — 2026-11-18 — `mira.api.evaluate_layer(product, target, context, settings)` → `DeviationReport` 1.0 with `schema_version`, `domain`, `timings_s.evaluate`, optics and versions; checked against the shared example and the DHMConnect validator — commits: `f513ef0`.
 - [x] MI-52: Comparison — 2026-11-18 — `mira.deviation.compare` → `DeviationReport` 1.0: substrate levelling, deviation map, RMSE / MAE / sigma, per-segment statistics, ±k·sigma classification, validity flags; thresholds stay empty until M7 — commits: `0cf5379`.
 - [x] MI-51: Forward model — 2026-11-18 — `mira.forward`: K20 formulas mirrored with a parity test against OffAxisHolo, `Optics` with sources and no defaults, Δn calibration hook, automatic / fixed domain choice (M5 = OM4) — commits: `3faf360`.
