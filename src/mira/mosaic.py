@@ -70,6 +70,7 @@ __all__ = [
     "build_mosaic",
     "detect_reference_region",
     "ReferenceDetection",
+    "mosaic_memory_bytes",
 ]
 
 _TWO_PI = 2.0 * math.pi
@@ -94,6 +95,60 @@ def border_band_estimate_um(z_um: float, na: float, n_medium: float) -> float:
     """
     s = min(na / n_medium, 0.999999)
     return abs(z_um) * s / math.sqrt(1.0 - s * s)
+
+
+#: Bytes per pixel, measured with ``tracemalloc`` (Office PC, 2026-11-19, MI-42).
+_BYTES_LATTICE_STATE = 23  # complex64 + 3 float32 accumulators + 3 bool masks
+_BYTES_TILE_STATE = 14  # complex64 field + float32 phase + 2 bool masks
+_BYTES_TILE_TRANSIENT = 210  # 64-bit temporaries of add_tile (measured 204)
+_BYTES_LATTICE_CLOSE = 90  # temporaries and outputs of close (measured 76-85)
+
+
+def mosaic_memory_bytes(
+    grid_shape: Sequence[int],
+    tile_shape: Sequence[int],
+    n_tiles: int,
+    *,
+    combine: str = "mean",
+) -> dict:
+    """Memory estimate of a :class:`MosaicBuilder` (MI-42).
+
+    The builder keeps its state in 32 bit (complex64 / float32): about
+    23 bytes per mosaic pixel plus 14 bytes per pixel of every added tile.
+    :meth:`MosaicBuilder.add_tile` needs about 210 bytes per tile pixel of
+    64-bit temporaries on top; :meth:`MosaicBuilder.close` about 90 bytes per
+    mosaic pixel, plus ``4 · n_tiles`` bytes per mosaic pixel for
+    ``combine="median"`` (a float32 stack of all tile phases). Coefficients
+    were measured with ``tracemalloc`` on synthetic rasters (Office PC,
+    2026-11-19).
+
+    Example: a 300 µm structure at 63x (mosaic ≈ 1725² px, 7 × 7 tiles of
+    512² px) needs ≈ 250 MB of state and ≈ 520 MB at the peak; with the
+    median ≈ 1.1 GB.
+
+    Parameters
+    ----------
+    grid_shape : sequence of int
+        Shape of the mosaic lattice.
+    tile_shape : sequence of int
+        Shape of one tile.
+    n_tiles : int
+        Number of tiles (``k · k`` for a raster).
+    combine : {"mean", "median"}, optional
+
+    Returns
+    -------
+    dict
+        ``state_bytes`` (after all tiles are added) and ``peak_bytes``.
+    """
+    g = int(grid_shape[0]) * int(grid_shape[1])
+    t = int(tile_shape[0]) * int(tile_shape[1])
+    state = _BYTES_LATTICE_STATE * g + _BYTES_TILE_STATE * t * int(n_tiles)
+    close = _BYTES_LATTICE_CLOSE * g
+    if combine == "median":
+        close += 4 * int(n_tiles) * g
+    peak = state + max(_BYTES_TILE_TRANSIENT * t, close)
+    return {"state_bytes": int(state), "peak_bytes": int(peak)}
 
 
 def rasterise_polygons(
@@ -310,8 +365,8 @@ class _Tile:
     index: int
     product_id: str
     sl: tuple[slice, slice]
-    field: np.ndarray  # complex128, corrected
-    phase: np.ndarray  # float64, unwrapped (or wrapped if unwrap == "none")
+    field: np.ndarray  # complex64, corrected (MI-42: 32-bit state)
+    phase: np.ndarray  # float32, unwrapped (or wrapped if unwrap == "none")
     valid: np.ndarray
     reference: np.ndarray  # reference-region mask on the crop
     weight: float
@@ -553,10 +608,11 @@ class MosaicBuilder:
         # structure seen by any tile, on the mosaic lattice
         self._ref_seen = np.zeros(grid.shape, bool)
         self._struct_seen = np.zeros(grid.shape, bool)
-        self._acc = np.zeros(grid.shape, np.complex128)
-        self._wacc = np.zeros(grid.shape)
-        self._pacc = np.zeros(grid.shape)
-        self._pw = np.zeros(grid.shape)
+        # 32-bit state (MI-42); per-tile computations run in 64 bit
+        self._acc = np.zeros(grid.shape, np.complex64)
+        self._wacc = np.zeros(grid.shape, np.float32)
+        self._pacc = np.zeros(grid.shape, np.float32)
+        self._pw = np.zeros(grid.shape, np.float32)
         self._tiles: list[_Tile] = []
         self._meta: dict[str, float] = {}
         self._timings: list[float] = []
@@ -855,8 +911,8 @@ class MosaicBuilder:
             index=index,
             product_id=str(product.product_id),
             sl=sl,
-            field=field,
-            phase=phase,
+            field=field.astype(np.complex64),
+            phase=np.asarray(phase, np.float32),
             valid=valid,
             reference=reference,
             weight=float(weight),
@@ -990,8 +1046,8 @@ class MosaicBuilder:
         self._pw[:] = 0
         count = np.zeros(self.grid.shape, np.int32)
         for i, t in enumerate(self._tiles):
-            t.field = t.field * np.exp(-1j * corr[i])
-            t.phase = t.phase - corr[i]
+            t.field = (t.field * np.exp(-1j * corr[i])).astype(np.complex64)
+            t.phase = (t.phase - corr[i]).astype(np.float32)
             if t.record["piston_rad"] is not None:
                 t.record["piston_rad"] = float(t.record["piston_rad"] + corr[i])
             self._accumulate(t)
@@ -1006,7 +1062,7 @@ class MosaicBuilder:
                 level = phase[ref].mean() if ref.any() else phase[valid].mean()
                 phase = phase - _TWO_PI * np.round(level / _TWO_PI)
         elif cfg.combine == "median":
-            stack = np.full((len(self._tiles),) + self.grid.shape, np.nan)
+            stack = np.full((len(self._tiles),) + self.grid.shape, np.nan, np.float32)
             for i, t in enumerate(self._tiles):
                 stack[i][t.sl] = np.where(t.valid, t.phase, np.nan)
             with warnings.catch_warnings():  # uncovered pixels are all-NaN
