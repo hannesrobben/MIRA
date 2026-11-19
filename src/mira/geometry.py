@@ -25,8 +25,8 @@ offset ``-P[:2, 2]``. It is the same affine model in ``(x, y)`` order;
 :meth:`StageToImage.from_xy_matrix` converts it, so the camera calibration of
 nanofactorysystem can be used without importing that package.
 
-Calibration file format (``StageImageCalibration`` 1.0, JSON; proposed here
-until the contract moves to ``dhmconnect/schemas``)::
+Calibration file format (``StageImageCalibration`` 1.0, JSON; contract in
+``dhmconnect/schemas`` since DL-A11, example in ``tests/contracts``)::
 
     {
       "message_type": "StageImageCalibration",

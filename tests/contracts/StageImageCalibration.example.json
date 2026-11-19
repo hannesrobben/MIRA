@@ -1,0 +1,29 @@
+{
+  "message_type": "StageImageCalibration",
+  "schema_version": "1.0",
+  "calibration_id": "cal-63x-dhm-2026-11-19",
+  "created_utc": "2026-11-19T10:00:00Z",
+  "objective": "Zeiss 63x",
+  "device": "dhm",
+  "jacobian_um_per_px": [
+    [
+      0.0869,
+      0.0004
+    ],
+    [
+      -0.0004,
+      0.0869
+    ]
+  ],
+  "offset_um": [
+    12.5,
+    -3.2
+  ],
+  "residuals_um": {
+    "rms": 0.05,
+    "max": 0.1,
+    "n_points": 9
+  },
+  "pose_tolerance_um": 1.0,
+  "source": "nanofactorysystem T104 / mira.calibration_marks"
+}

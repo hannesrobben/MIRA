@@ -430,3 +430,15 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: 231 passed, 3 skipped (optional dhmconnect / offaxisholo), 1 xfailed. The stitched and the fused product headers of the tests were validated with `dhmconnect.schemas.validate(..., "LayerProduct")` in the DHMConnect venv (`%LOCALAPPDATA%\Temp\dhmc312`): valid.
 - **Commits:** `b4926bb` fix(products): send the context fields of a tile built from arrays [MI-60], `2e21736` fix(stitching): make the tile records match the LayerProduct contract [MI-40] (merged via `f6042bf`), `a2ea648` feat(stitching): add the incremental group plug-in for DHMConnect [MI-60], plus the `docs(todo)` commit.
 - **Follow-ups:** DHMConnect DL-B9 can call the plug-in (note added there); the service must pass `experiment_uuid`, `context_id`, `job_id`, `parameter_set_id`, `config_hash` as metadata and `n_surround` through the capture context (contract fields); the fusion / stitching choice from the footprint is a rule of this plug-in (M4 says one pipeline; the service can force a mode); memory per group see MI-42.
+
+### 2026-11-19 10:55 CET — [MI-11] Vendor the `StageImageCalibration` contract (follow-up of DHMConnect DL-A11)
+- **Status:** done
+- **Changes:**
+  - `tests/contracts/StageImageCalibration.example.json` (new): vendored example of contract 1.0 (DHMConnect `b04fe69`)
+  - `tests/contracts/MANIFEST.json`: re-exported (commit `b04fe69`; the other examples unchanged)
+  - `tests/test_geometry.py`: `test_vendored_contract_example_round_trips`
+  - `src/mira/geometry.py`: docstring points at the contract instead of "proposed here"
+  - `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 232 passed, 3 skipped, 1 xfailed.
+- **Commits:** `3ab644d` test(geometry): vendor the StageImageCalibration contract example [MI-11], `b246d61` docs(geometry): point the calibration format at the dhmconnect contract [MI-11]. Branch `test/vendor-stage-image-calibration`, not merged.
+- **Follow-ups:** none (MI-11 is already Done; no TODO.md change).
