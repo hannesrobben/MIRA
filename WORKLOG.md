@@ -385,3 +385,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: 211 passed, 2 skipped, 1 xfailed. Measured on MI-22 fields (Office PC): fusion 9 positions × 10 frames, 0.2 rad white + 0.2 rad coherent: tile noise 0.20 → 0.11 rad (M4 model for full coverage: 0.07 rad); complex mean vs phase median: lower noise, edge width 0.8 vs 1.4 µm. Stitching 3 × 3 raster, 9 rad plateau: no 2π errors, error std < 0.2 rad. Registration: edge normal < 0.01 µm rms (before: 0.13 µm); isotropy 0.002–0.004 (edges) vs 0.44–0.61 (2-D scenes); confidence 0.055 (featureless) vs ≥ 0.35.
 - **Commits:** `810784f` feat(registration): handle edge-only overlaps and noisy fields [MI-30], `96a0447` feat(stitching): one incremental pipeline for fusion and stitching [MI-30] [MI-40], plus the `docs(todo)` commit.
 - **Follow-ups:** MI-43 (a-posteriori reference mask); along an undetermined edge direction the stage error remains (measure `pose_tolerance_um`, T104); `min_confidence` / `min_isotropy` / `consistency_max_fraction` are start values for tests until M7 / K11-T; K11-T study should store spatial and temporal results per layer (note kept in MI-40 text, no temporal option yet); MI-60 maps the `GroupSpec` stitching block (`border_band_um`, `min_overlap_um`, `unwrap`) onto `MosaicConfig`.
+
+### 2026-11-19 08:27 CET — [MI-41] Detection and fit of the calibration marks
+- **Status:** done (synthetic marks; real captures follow with nanofactorysystem T104)
+- **Changes:**
+  - `src/mira/calibration_marks.py` (new): `segment_mark`, `detect_cross`, `detect_square` (sub-pixel corners, symmetry resolved with the prior), `fit_cross_raster` (uses `mira.geometry.fit_stage_to_image`), `MarkDetection`, `SquareFit`
+  - `tests/test_calibration_marks.py` (new): 5 tests
+  - `TODO.md`: MI-41 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 216 passed, 2 skipped, 1 xfailed. Synthetic (20x, 1.2°, shear 0.01): cross centre < 0.05 px, square Jacobian < 1.5e-3 µm/px, raster J < 1e-3 µm/px, offset < 0.03 µm.
+- **Commits:** `750dbf7` feat(geometry): detect and fit the printed calibration marks [MI-41], plus the `docs(todo)` commit.
+- **Follow-ups:** check on real camera / DHM images of the T104 marks (phase images may need `smooth_px` > 1); refinement from the MI-40 residual shifts stays open (no todo yet, needs real data).
