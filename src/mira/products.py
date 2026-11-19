@@ -74,8 +74,10 @@ _DTYPE_NAMES = {
 
 # ----------------------------------------------------------------- helpers
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
-        "+00:00", "Z"
+    return (
+        datetime.now(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
     )
 
 
@@ -194,7 +196,9 @@ def _decode_buffers(descriptors: Sequence[Mapping], buffers: Sequence) -> dict:
         if isinstance(payload, tuple):
             given, payload = payload
             if given != name:
-                raise ValidationError(f"Buffer {given!r} received where {name!r} expected.")
+                raise ValidationError(
+                    f"Buffer {given!r} received where {name!r} expected."
+                )
         if name not in _WIRE_DTYPES:
             # Unknown buffers are ignored (forward compatibility).
             continue
@@ -275,7 +279,9 @@ class Grid:
         try:
             ny, nx = (int(v) for v in self.shape)
         except (TypeError, ValueError) as exc:
-            raise ValidationError(f"shape must be (ny, nx); got {self.shape!r}.") from exc
+            raise ValidationError(
+                f"shape must be (ny, nx); got {self.shape!r}."
+            ) from exc
         if ny < 1 or nx < 1:
             raise ValidationError(f"shape must be positive; got {(ny, nx)}.")
         object.__setattr__(self, "shape", (ny, nx))
@@ -553,9 +559,13 @@ class TileProduct:
                 raise ValidationError(f"{name} is required (no default, G4 / G7).")
             object.__setattr__(self, name, float(value))
         if self.propagation_index <= 0 or self.wavelength_um <= 0:
-            raise ValidationError("propagation_index and wavelength_um must be positive.")
+            raise ValidationError(
+                "propagation_index and wavelength_um must be positive."
+            )
         object.__setattr__(
-            self, "position_actual_um", _stage(self.position_actual_um, "position_actual_um")
+            self,
+            "position_actual_um",
+            _stage(self.position_actual_um, "position_actual_um"),
         )
         object.__setattr__(
             self,
@@ -564,7 +574,9 @@ class TileProduct:
         )
         for name in ("material",):
             value = getattr(self, name)
-            object.__setattr__(self, name, None if value is None else _freeze(dict(value)))
+            object.__setattr__(
+                self, name, None if value is None else _freeze(dict(value))
+            )
         for name in ("quality", "capture", "reconstruction", "extra"):
             object.__setattr__(self, name, _freeze(dict(getattr(self, name) or {})))
 
@@ -808,6 +820,23 @@ class TileProduct:
             }
         )
         recon.setdefault("created_utc", _utc_now())
+        # A product built from arrays has no received CaptureContext; send the
+        # context fields it carries so that from_message can rebuild it.
+        capture = _thaw(self.capture)
+        for key in (
+            "position_actual_um",
+            "position_commanded_um",
+            "structure_id",
+            "group_id",
+            "layer_index",
+            "tile_index",
+            "n_structure",
+            "n_surround",
+            "material",
+        ):
+            value = getattr(self, key)
+            if key not in capture and value is not None:
+                capture[key] = _thaw(value)
         header = _thaw(self.extra)
         header.update(
             {
@@ -817,7 +846,7 @@ class TileProduct:
                 "context_id": self.context_id,
                 "job_id": self.job_id,
                 "reconstruction": recon,
-                "capture": _thaw(self.capture),
+                "capture": capture,
                 "background_id": self.background_id,
                 "parameter_set_id": self.parameter_set_id,
                 "config_hash": self.config_hash,
@@ -950,11 +979,14 @@ class LayerProduct:
                 raise ValidationError(f"{name} is required (no default, G4 / G7).")
             object.__setattr__(self, name, float(value))
         tiles = tuple(
-            t if isinstance(t, TileRecord) else TileRecord.from_dict(t) for t in self.tiles
+            t if isinstance(t, TileRecord) else TileRecord.from_dict(t)
+            for t in self.tiles
         )
         object.__setattr__(self, "tiles", tiles)
         for name in ("member_ids", "background_ids", "warnings"):
-            object.__setattr__(self, name, tuple(str(v) for v in getattr(self, name) or ()))
+            object.__setattr__(
+                self, name, tuple(str(v) for v in getattr(self, name) or ())
+            )
         for name in ("quality", "versions", "timings_s", "extra"):
             object.__setattr__(self, name, _freeze(dict(getattr(self, name) or {})))
 
@@ -1171,4 +1203,3 @@ def to_structure_processor(
         wavelength=product.wavelength_um * 1e-6,
         **kwargs,
     )
-

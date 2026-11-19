@@ -88,7 +88,12 @@ def test_tile_message_round_trip_keeps_header():
 def test_tile_with_field_buffer_uses_it():
     header = _example("ProductSet")
     descriptors = header["reconstruction"]["buffers"] + [
-        {"name": "field", "dtype": "complex64", "shape": [512, 512], "byte_order": "little"}
+        {
+            "name": "field",
+            "dtype": "complex64",
+            "shape": [512, 512],
+            "byte_order": "little",
+        }
     ]
     header["reconstruction"]["buffers"] = descriptors
     buffers = _synthetic_buffers(descriptors)
@@ -119,7 +124,9 @@ def test_tile_requires_physical_parameters():
     header = _example("ProductSet")
     del header["reconstruction"]["propagation_index"]
     with pytest.raises(ValidationError, match="propagation_index"):
-        TileProduct.from_message(header, _synthetic_buffers(header["reconstruction"]["buffers"]))
+        TileProduct.from_message(
+            header, _synthetic_buffers(header["reconstruction"]["buffers"])
+        )
 
 
 def test_tile_rejects_wrong_message_and_bad_buffers():
@@ -163,6 +170,29 @@ def test_tile_from_arrays_and_immutability():
     assert tile.phase_rad[0, 0] == pytest.approx(0.5)
 
 
+def test_tile_from_arrays_survives_a_message_round_trip():
+    """A product built from arrays sends its context fields (no capture yet)."""
+    grid = Grid.centred({"x": 10.0, "y": 20.0, "z": 0.0}, (0.2, 0.1), (4, 6))
+    tile = TileProduct.from_arrays(
+        phase_rad=np.full((4, 6), 0.5, np.float32),
+        intensity_rel=np.full((4, 6), 0.25, np.float32),
+        grid=grid,
+        z_um=0.0,
+        propagation_index=1.0,
+        wavelength_um=0.674994,
+        product_id="t",
+        context_id=None,
+        position_actual_um={"x": 10.0, "y": 20.0, "z": 0.0},
+        tile_index=3,
+        group_id="g",
+    )
+    header, buffers = tile.to_message()
+    back = TileProduct.from_message(header, buffers)
+    assert back.grid == tile.grid
+    assert back.tile_index == 3 and back.group_id == "g"
+    np.testing.assert_allclose(back.field, tile.field, rtol=1e-6)
+
+
 # ---------------------------------------------------------------- Grid
 def test_grid_centred_and_validation():
     grid = Grid.centred({"x": 1200.0, "y": 850.0}, (0.1, 0.2), (11, 21))
@@ -198,7 +228,12 @@ def test_layer_keeps_unknown_keys_and_optional_field():
     header["future_key"] = {"a": 1}
     header["tiles"][0]["future_tile_key"] = 2
     header["buffers"].append(
-        {"name": "field", "dtype": "complex64", "shape": [600, 600], "byte_order": "little"}
+        {
+            "name": "field",
+            "dtype": "complex64",
+            "shape": [600, 600],
+            "byte_order": "little",
+        }
     )
     buffers = _synthetic_buffers(header["buffers"])
     layer = LayerProduct.from_message(header, buffers)
