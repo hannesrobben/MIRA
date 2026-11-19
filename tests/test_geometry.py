@@ -174,3 +174,22 @@ def test_validation():
         StageToImage(jacobian_um_per_px=[[1, 1], [1, 1]], offset_um=(0, 0), **META)
     with pytest.raises(ValidationError, match="message_type"):
         StageToImage.from_dict({"message_type": "Other"})
+
+
+def test_vendored_contract_example_round_trips():
+    """``StageImageCalibration`` 1.0 of dhmconnect (DL-A11) reads and writes
+    the same keys and values as this module."""
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).parent / "contracts" / "StageImageCalibration.example.json"
+    example = json.loads(path.read_text(encoding="utf-8"))
+    model = StageToImage.from_dict(example)
+    out = model.to_dict()
+    assert set(out) == set(example)
+    np.testing.assert_allclose(out["jacobian_um_per_px"], example["jacobian_um_per_px"])
+    np.testing.assert_allclose(out["offset_um"], example["offset_um"])
+    for key in ("calibration_id", "created_utc", "objective", "device", "source"):
+        assert out[key] == example[key]
+    assert out["pose_tolerance_um"] == example["pose_tolerance_um"]
+    assert out["residuals_um"] == example["residuals_um"]

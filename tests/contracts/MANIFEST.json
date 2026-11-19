@@ -1,7 +1,7 @@
 {
   "source": "dhmconnect.schemas",
   "dhmconnect_version": "0.1.0.dev0",
-  "dhmconnect_commit": "fc85f5c",
+  "dhmconnect_commit": "b04fe69",
   "schema_versions": {
     "ProductSet": "1.0",
     "LayerProduct": "1.0",
@@ -10,7 +10,8 @@
     "LayerTarget": "1.0",
     "DeviationReport": "1.0",
     "ParameterSet": "0.1",
-    "GroupSpec": "1.0"
+    "GroupSpec": "1.0",
+    "StageImageCalibration": "1.0"
   },
   "files": {
     "ProductSet.example.json": "eb362f08916e0392dbdfd6e99acbf12c6563db1ce1e271a6a4821734f33b653a",
@@ -20,6 +21,7 @@
     "LayerTarget.example.json": "671757111492ddd76ade3f5df324f8ea4e4b11340c52f73cc9a2f37c531c7080",
     "DeviationReport.example.json": "d2a67e407912c271f89294812aca7e74289bd9dcfc9d4e265a14f6460ca1b03d",
     "ParameterSet.example.json": "5eba2651bcb5213abc1217decf6a2e18405cdce125e605ab2d197e0cc2debcd7",
-    "GroupSpec.example.json": "ee065746b8f4996089d2dfe2e9df2fcc18da30f30150c9f6d298f13304b4d627"
+    "GroupSpec.example.json": "ee065746b8f4996089d2dfe2e9df2fcc18da30f30150c9f6d298f13304b4d627",
+    "StageImageCalibration.example.json": "303a57ae46012aeef767b47fb04684c09038d87f01b9ae263c06ab1978a27455"
   }
 }
