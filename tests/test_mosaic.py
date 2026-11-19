@@ -14,6 +14,7 @@ from mira.mosaic import (
     border_band_estimate_um,
     build_mosaic,
     detect_reference_region,
+    mosaic_memory_bytes,
     mosaic_grid,
     rasterise_polygons,
 )
@@ -352,3 +353,68 @@ def test_a_priori_mask_stays_the_default_and_detection_can_be_disabled():
         MosaicConfig.stitching(**COMMON, reference_detection="otsu")
     with pytest.raises(ValidationError, match="structure_sign"):
         MosaicConfig.stitching(**COMMON, structure_sign=0)
+
+
+# ---------------------------------------------------------------- MI-42
+def _square_raster(k, n=128, seed=0):
+    step = 0.2 * n * 0.6
+    scene = SyntheticScene(
+        (Feature("rect", (0.0, 0.0), (step * k * 0.6,) * 2, phase_rad=3.0),)
+    )
+    tiles = [
+        make_tile(
+            scene,
+            (iy * step, ix * step),
+            (n, n),
+            PIXEL,
+            noise=SpeckleNoise(sigma_t_rad=0.1),
+            rng=seed + i,
+        ).to_product(product_id=f"m{i}")
+        for i, (iy, ix) in enumerate((a, b) for a in range(k) for b in range(k))
+    ]
+    grid = mosaic_grid([t.grid.centre_um for t in tiles], (n, n), PIXEL, 1.0)
+    return tiles, grid
+
+
+def test_mosaic_state_is_32_bit():
+    tiles, grid = _square_raster(2)
+    builder = MosaicBuilder(grid, MosaicConfig.stitching(**COMMON))
+    for t in tiles:
+        builder.add_tile(t)
+    assert builder._acc.dtype == np.complex64
+    assert {builder._wacc.dtype, builder._pacc.dtype, builder._pw.dtype} == {
+        np.dtype(np.float32)
+    }
+    assert all(
+        t.field.dtype == np.complex64 and t.phase.dtype == np.float32
+        for t in builder._tiles
+    )
+    product = builder.close()
+    assert product.phase_rad.dtype == np.float32
+    assert product.intensity_rel.dtype == np.float32
+    assert product.field.dtype == np.complex64
+
+
+@pytest.mark.parametrize("k", [3, 4])
+def test_mosaic_memory_matches_the_estimate(k):
+    """MI-42: measured state and peak stay within 20 % of the estimate."""
+    import tracemalloc
+
+    tiles, grid = _square_raster(k)
+    config = MosaicConfig.stitching(**COMMON)
+    build_mosaic(tiles[:2], config)  # warm-up: lazy imports allocate once
+    tracemalloc.start()
+    try:
+        builder = MosaicBuilder(grid, config)
+        for t in tiles:
+            builder.add_tile(t)
+        state, peak_add = tracemalloc.get_traced_memory()
+        builder.close()
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    est = mosaic_memory_bytes(grid.shape, tiles[0].grid.shape, len(tiles))
+    assert 0.8 * est["state_bytes"] <= state <= 1.2 * est["state_bytes"]
+    assert max(peak_add, peak) <= 1.2 * est["peak_bytes"]
+    median = mosaic_memory_bytes(grid.shape, (128, 128), k * k, combine="median")
+    assert median["peak_bytes"] > est["peak_bytes"]
