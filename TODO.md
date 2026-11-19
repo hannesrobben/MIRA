@@ -110,15 +110,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 6 — Integration
 
-- [ ] MI-60: Plug-in for the DHM service (G5-new) [phase: 6]
-  - Priority: high
-  - Size: M
-  - Depends on: MI-30, MI-40
-  - Done when: `mira.plugins.dhmconnect` offers an incremental group API (open with the `GroupSpec`,
-    `add_tile(TileProduct)` while the stage moves to the next position, `close()` → `LayerProduct`) for the
-    fusion and the stitching configuration; pure functions, no network, picklable-free inputs (arrays +
-    JSON); runs in DHMConnect worker processes on the CPU (M8); called by DL-B9; timings per tile.
-
 - [ ] MI-62: Offline use on experiment files [phase: 6]
   - Priority: medium
   - Size: M
@@ -221,6 +212,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-60: Plug-in for the DHM service (G5-new) — 2026-11-19 — `mira.plugins.dhmconnect`: `open_group(GroupSpec, params)` → `GroupSession.add_tile` (product or `ProductSet` message, idempotent) → `close()` / `close_message()` → `LayerProduct` 1.0 (validated with the DHMConnect schema); fusion vs stitching from the footprint; M7 thresholds required from the parameter set; per-tile timings — commits: `b4926bb`, `2e21736`, `a2ea648`.
 - [x] MI-42: Size limits — 2026-11-19 — mosaic state in complex64 / float32 throughout; `mira.mosaic.mosaic_memory_bytes` documents state and peak memory from coefficients measured with `tracemalloc` (300 µm at 63x ≈ 250 MB state, 520 MB peak); tested for 3 × 3 and 4 × 4 rasters — commits: `f6a93fb`.
 - [x] MI-43: A-posteriori reference mask from detection (G10 SA4) — 2026-11-19 — `mira.mosaic.detect_reference_region` (Otsu split on the unwrapped tile with alternating plane fit, contrast test against the robust substrate noise) used per tile when no `occupied_um` exists; detections that conflict with structure seen by earlier tiles fall back to `whole_field`; stitched result equals the a-priori one within 0.015 rad on MI-22 fields — commits: `331b946`.
 - [x] MI-41: Detection and fit of the calibration marks (G10 SA2) — 2026-11-19 — `mira.calibration_marks`: cross centre (weighted centroid), square corners (sub-pixel lines, symmetry resolved with the prior) → Jacobian, 3 × 3 cross raster → `fit_stage_to_image`; tested on synthetic marks — commits: `750dbf7`.

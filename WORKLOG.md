@@ -415,3 +415,18 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: 223 passed, 2 skipped, 1 xfailed. Measured with `tracemalloc` (Office PC, tiles 128² and 256²): state 23 B per mosaic pixel + 14 B per tile pixel (ratio to the estimate 1.00–1.01), add_tile temporaries ≈ 204 B per tile pixel, close ≈ 76–85 B per mosaic pixel. Extrapolated: 300 µm at 63x (1725², 7 × 7 tiles of 512²) ≈ 250 MB state, ≈ 520 MB peak, ≈ 1.1 GB with `combine="median"`.
 - **Commits:** `f6a93fb` perf(stitching): keep the mosaic state in 32 bit and estimate memory [MI-42], plus the `docs(todo)` commit.
 - **Follow-ups:** none; the numbers should be re-measured on the DHM-PC with the worker pool (MI-60 / DL-B9).
+
+### 2026-11-19 08:49 CET — [MI-60] Plug-in for the DHM service
+- **Status:** done
+- **Changes:**
+  - `src/mira/plugins/__init__.py` (new): plug-in package
+  - `src/mira/plugins/dhmconnect.py` (new): `PluginParameters` (M7 thresholds required), `GroupSession` (`add_tile`, `close`, `close_message`, `status`, `timings`), `open_group`, `run_group`, `describe`
+  - `tests/test_plugin_dhmconnect.py` (new): 7 tests (stitching with messages, fusion choice, schema validation when `dhmconnect` is installed, duplicates / missing positions, validation, JSON-only state)
+  - `src/mira/products.py`: `TileProduct.to_message` sends the context fields of a product built from arrays (fix, found while driving the plug-in with messages)
+  - `tests/test_products.py`: round trip of a tile built from arrays
+  - `src/mira/mosaic.py`: tile records match the `LayerProduct` 1.0 contract (anchor enum `ring_substrate` / `overlap` / `none`, first-tile `shift_um`, piston / tilt 0 instead of null, unwrap record with `k_offset` / `consistent` for fusion) (fix, found by validating the plug-in output)
+  - `tests/test_mosaic.py`: anchor name, new record test
+  - `TODO.md`: MI-60 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 231 passed, 3 skipped (optional dhmconnect / offaxisholo), 1 xfailed. The stitched and the fused product headers of the tests were validated with `dhmconnect.schemas.validate(..., "LayerProduct")` in the DHMConnect venv (`%LOCALAPPDATA%\Temp\dhmc312`): valid.
+- **Commits:** `b4926bb` fix(products): send the context fields of a tile built from arrays [MI-60], `2e21736` fix(stitching): make the tile records match the LayerProduct contract [MI-40] (merged via `f6042bf`), `a2ea648` feat(stitching): add the incremental group plug-in for DHMConnect [MI-60], plus the `docs(todo)` commit.
+- **Follow-ups:** DHMConnect DL-B9 can call the plug-in (note added there); the service must pass `experiment_uuid`, `context_id`, `job_id`, `parameter_set_id`, `config_hash` as metadata and `n_surround` through the capture context (contract fields); the fusion / stitching choice from the footprint is a rule of this plug-in (M4 says one pipeline; the service can force a mode); memory per group see MI-42.
