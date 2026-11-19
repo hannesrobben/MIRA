@@ -343,3 +343,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest` at the end of the phase: see the merge commit of MI-53 (all pass).
 - **Commits:** see the entries above.
 - **Follow-ups / to check with real data:** the comparison levels on the substrate of the target footprint — check on a real layer that the a-priori footprint and the measured structure line up (pose shift; MI-11 / MI-20); noise level sigma for the classification and the thresholds (M7); `phase_sign` against Sensofar / AFM once (G4).
+
+### 2026-11-19 07:47 CET — [MI-11] Stage-to-image geometry
+- **Status:** done (partial result as allowed by the todo: model and estimation on synthetic data; the real calibration needs captures, nanofactorysystem T104)
+- **Changes:**
+  - `src/mira/geometry.py` (new): `StageToImage` (p = s + d + J (q − c), per objective and device), nominal fallback (G10 SA2), `fit_stage_to_image` (LS, unknown common mark point or known points), proposed file format `StageImageCalibration` 1.0 with `load_calibration` / `save_calibration`, `from_xy_matrix` for nanofactorysystem `Transform`
+  - `tests/test_geometry.py` (new): 11 tests
+  - `TODO.md`: MI-11 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 185 passed, 2 skipped, 1 xfailed (Python 3.12 `.venv`).
+- **Commits:** `7550d4f` feat(geometry): add the stage-to-image model and its LS fit [MI-11], plus the `docs(todo)` commit.
+- **Follow-ups:** the calibration file format should become a contract in `dhmconnect/schemas` (todo added in DHMConnect); nanofactorysystem T104 writes the file (note added there); the fallback tolerance is stated by the caller until `pose_tolerance_um` is measured (T104).
