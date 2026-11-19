@@ -106,18 +106,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 4 — Stitching
 
-- [ ] MI-41: Detection and fit of the calibration marks (G10 SA2) [phase: 4]
-  - Priority: high
-  - Size: M
-  - Depends on: MI-11
-  - Done when:
-    - the printed cross + square of nanofactorysystem T104 are detected in camera and DHM images; the
-      cross gives the offset of the centres, the square rotation / scale / shear; the cross imaged at known
-      stage offsets (e.g. 3 × 3) gives an affine least-squares fit independent of the galvo scale, with
-      residuals;
-    - the result feeds the calibration file of T104 and the model of MI-11; residual shifts of MI-40 can
-      refine it later; tested on synthetic marks.
-
 - [ ] MI-43: A-posteriori reference mask from detection (G10 SA4, found during MI-40) [phase: 4]
   - Priority: medium
   - Size: S
@@ -240,6 +228,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-41: Detection and fit of the calibration marks (G10 SA2) — 2026-11-19 — `mira.calibration_marks`: cross centre (weighted centroid), square corners (sub-pixel lines, symmetry resolved with the prior) → Jacobian, 3 × 3 cross raster → `fit_stage_to_image`; tested on synthetic marks — commits: `750dbf7`.
 - [x] MI-40: Stitching (G10 SA6) — 2026-11-19 — `MosaicConfig.stitching()`: border band, registration against the earlier tile (partial along straight edges), unwrapping per tile with k·2π and consistency flag, global LS piston adjustment with substrate anchors, incremental `MosaicBuilder` → `LayerProduct` — commits: `810784f`, `96a0447`.
 - [x] MI-30: Fusion of a speckle set (M3, M4) — 2026-11-19 — `MosaicConfig.fusion()` of the shared `mira.mosaic` pipeline: registration (stage prior), piston / tilt (MI-21), complex weighted mean with count / `min_count`, noise before / after in the product; mean vs median compared on synthetic data — commits: `810784f`, `96a0447`.
 - [x] MI-31: Noise metrics — 2026-11-19 — `mira.noise`: reference-region noise (plane / piston detrend, complex input), radial PSD, correlation length, LS fit of the M4 model σ² = σt²/(Nf·Np) + σcoh²/Np and `positions_needed` — commits: `0d93431`.
