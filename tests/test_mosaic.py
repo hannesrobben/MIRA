@@ -180,7 +180,7 @@ def test_stitching_raster_with_unwrapping_per_tile():
     assert err.std() < 0.2
     assert np.mean(np.abs(err) > np.pi) < 1e-3
     ring = [t for t in product.tiles if t.tile_index < 8]
-    assert all(t.anchor == "reference_region" for t in ring)
+    assert all(t.anchor == "ring_substrate" for t in ring)
     centre = product.tiles[-1]
     assert centre.reference_fraction == 0.0 and centre.anchor == "overlap"
     assert all(t.reference_source == "mask_a_priori" for t in product.tiles)
@@ -314,7 +314,7 @@ def test_stitching_without_a_priori_mask_uses_detection():
     centre = product.tiles[-1]
     assert all(t.reference_source == "mask_a_posteriori" for t in ring)
     assert all(0.1 < t.reference_fraction < 0.9 for t in ring)
-    assert all(t.anchor == "reference_region" for t in ring)
+    assert all(t.anchor == "ring_substrate" for t in ring)
     # The centre tile lies on the 9 rad plateau with a 3 rad disc: its
     # detection (disc on plateau) conflicts with the plateau the ring tiles
     # saw as structure, so it falls back to whole_field (SA4).
@@ -418,3 +418,28 @@ def test_mosaic_memory_matches_the_estimate(k):
     assert max(peak_add, peak) <= 1.2 * est["peak_bytes"]
     median = mosaic_memory_bytes(grid.shape, (128, 128), k * k, combine="median")
     assert median["peak_bytes"] > est["peak_bytes"]
+
+
+def test_tile_records_follow_the_layer_product_contract():
+    """Record fields the LayerProduct 1.0 schema requires as numbers / enums."""
+    anchors = {"ring_substrate", "overlap", "whole_field", "none"}
+    for build in (
+        lambda: build_mosaic(
+            _raster_tiles(seed=7)[1], MosaicConfig.stitching(**COMMON)
+        ),
+        lambda: build_mosaic(
+            _fusion_tiles(seed=7)[1],
+            MosaicConfig.fusion(**COMMON),
+            occupied_um=_fusion_tiles(seed=7)[2],
+        ),
+    ):
+        product = build()
+        for t in product.tiles:
+            assert t.anchor in anchors
+            assert len(t.registration["shift_um"]) == 2 and t.registration["method"]
+            assert isinstance(t.piston_rad, float)
+            assert t.tilt_rad_per_um is not None
+            assert {"method", "k_offset", "consistent"} <= set(t.unwrap)
+    first = product.tiles[0]
+    assert first.registration["method"] == "first_tile"
+    assert first.anchor in {"ring_substrate", "overlap"}
