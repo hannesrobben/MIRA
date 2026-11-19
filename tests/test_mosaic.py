@@ -13,6 +13,7 @@ from mira.mosaic import (
     MosaicConfig,
     border_band_estimate_um,
     build_mosaic,
+    detect_reference_region,
     mosaic_grid,
     rasterise_polygons,
 )
@@ -258,3 +259,96 @@ def test_min_count_masks_low_coverage():
     )
     assert 0 < product.valid.sum() < covered.valid.sum()
     assert product.quality["coverage_min"] == 9
+
+
+# ---------------------------------------------------------------- MI-43
+def test_detect_reference_region_on_a_single_tile():
+    """The detection separates a 1.5 rad plateau from the tilted substrate."""
+    scene = SyntheticScene((Feature("rect", (0.0, 0.0), (8.0, 8.0), phase_rad=1.5),))
+    tile = make_tile(
+        scene,
+        (2.0, -3.0),
+        SHAPE,
+        PIXEL,
+        noise=SpeckleNoise(sigma_t_rad=0.1),
+        rng=7,
+        piston_rad=2.0,
+        tilt_rad_per_um=(0.02, -0.03),
+    ).to_product(product_id="d0")
+    field = np.asarray(tile.field)
+    valid = np.ones(SHAPE, bool)
+    det = detect_reference_region(field, valid, PIXEL, margin_um=0.6)
+    assert det.reference is not None and det.contrast > 5
+    truth_substrate = scene.substrate_mask(tile.grid)
+    truth, _ = scene.sample(tile.grid)
+    # Reference pixels carry at most the far tail of the soft edge (< 0.1 rad,
+    # the noise level); most of the substrate is kept.
+    assert truth[det.reference].max() < 0.1
+    assert det.reference.sum() > 0.8 * truth_substrate.sum()
+    rec = det.to_record()
+    assert rec["accepted"] and rec["structure_px"] > 0
+
+
+def test_detect_reference_region_rejects_tiles_without_contrast():
+    """A tile entirely on the plateau or on the substrate has no reference."""
+    scene = SyntheticScene((Feature("rect", (0.0, 0.0), (80.0, 80.0), phase_rad=1.5),))
+    tile = make_tile(
+        scene, (0.0, 0.0), SHAPE, PIXEL, noise=SpeckleNoise(sigma_t_rad=0.1), rng=3
+    ).to_product(product_id="d1")
+    det = detect_reference_region(np.asarray(tile.field), np.ones(SHAPE, bool), PIXEL)
+    assert det.reference is None and det.contrast < 5
+    with_mask = detect_reference_region(
+        np.ones(SHAPE, complex), np.ones(SHAPE, bool), PIXEL
+    )
+    assert with_mask.reference is None
+
+
+def test_stitching_without_a_priori_mask_uses_detection():
+    """MI-43: ring tiles get an a-posteriori mask, the centre falls back."""
+    scene, tiles, occ = _raster_tiles(seed=5)
+    config = MosaicConfig.stitching(**COMMON, reference_margin_um=2.0)
+    product = build_mosaic(tiles, config)
+    assert product.quality["reference_source"] == "mask_a_posteriori"
+    ring = [t for t in product.tiles if t.tile_index < 8]
+    centre = product.tiles[-1]
+    assert all(t.reference_source == "mask_a_posteriori" for t in ring)
+    assert all(0.1 < t.reference_fraction < 0.9 for t in ring)
+    assert all(t.anchor == "reference_region" for t in ring)
+    # The centre tile lies on the 9 rad plateau with a 3 rad disc: its
+    # detection (disc on plateau) conflicts with the plateau the ring tiles
+    # saw as structure, so it falls back to whole_field (SA4).
+    assert centre.reference_source == "whole_field"
+    assert centre.reference_fraction == 0.0 and centre.anchor == "overlap"
+    assert centre.extra["reference_detection"]["conflict_fraction"] > 0.5
+    # Same result as with the a-priori mask: measured (Office PC, seeds 5-10)
+    # |mean difference| <= 0.015 rad, std within 4 %.
+    prior = build_mosaic(tiles, config, occupied_um=occ)
+    truth, _ = scene.sample(product.grid)
+    err = (product.phase_rad - truth)[product.valid]
+    err_prior = (prior.phase_rad - truth)[prior.valid]
+    assert abs(err.mean() - err_prior.mean()) < 0.03
+    assert err.std() < 1.1 * err_prior.std()
+    assert np.mean(np.abs(err) > np.pi) < 1e-3
+
+
+def test_a_priori_mask_stays_the_default_and_detection_can_be_disabled():
+    scene, tiles, occ = _raster_tiles(seed=6)
+    a_priori = build_mosaic(
+        tiles,
+        MosaicConfig.stitching(**COMMON, reference_margin_um=2.0),
+        occupied_um=occ,
+    )
+    assert all(t.reference_source == "mask_a_priori" for t in a_priori.tiles)
+    assert all("reference_detection" not in t.extra for t in a_priori.tiles)
+    off = build_mosaic(
+        tiles, MosaicConfig.stitching(**COMMON, reference_detection="none")
+    )
+    assert off.quality["reference_source"] == "whole_field"
+    assert all(
+        t.reference_source == "whole_field" and t.reference_fraction == 0.0
+        for t in off.tiles
+    )
+    with pytest.raises(ValidationError, match="reference_detection"):
+        MosaicConfig.stitching(**COMMON, reference_detection="otsu")
+    with pytest.raises(ValidationError, match="structure_sign"):
+        MosaicConfig.stitching(**COMMON, structure_sign=0)
