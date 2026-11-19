@@ -395,3 +395,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: 216 passed, 2 skipped, 1 xfailed. Synthetic (20x, 1.2°, shear 0.01): cross centre < 0.05 px, square Jacobian < 1.5e-3 µm/px, raster J < 1e-3 µm/px, offset < 0.03 µm.
 - **Commits:** `750dbf7` feat(geometry): detect and fit the printed calibration marks [MI-41], plus the `docs(todo)` commit.
 - **Follow-ups:** check on real camera / DHM images of the T104 marks (phase images may need `smooth_px` > 1); refinement from the MI-40 residual shifts stays open (no todo yet, needs real data).
+
+### 2026-11-19 08:36 CET — [MI-43] A-posteriori reference mask from detection
+- **Status:** done
+- **Changes:**
+  - `src/mira/mosaic.py`: `detect_reference_region` / `ReferenceDetection` (pure); `MosaicBuilder` decides the reference source per tile (a priori → a posteriori → `whole_field`), rejects detections that conflict with structure seen by earlier tiles, anchors per tile, product-level reference = detected substrate minus detected structure; new `MosaicConfig` fields `reference_detection`, `detection_min_contrast` (5 σ), `detection_min_size_px`, `structure_sign`
+  - `tests/test_mosaic.py`: 4 new tests (single-tile detection, rejection without contrast, stitching without a-priori mask vs. with it, default / disabled detection)
+  - `TODO.md`: MI-43 to Done, new MI-84; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 220 passed, 2 skipped, 1 xfailed (Python 3.12 `.venv`). Measured on MI-22 raster fields (Office PC, seeds 5–10, margin 2 µm): a-posteriori vs a-priori stitched phase |Δmean| ≤ 0.015 rad, std within 4 %; ring tiles detect, the centre tile (disc on plateau) is rejected by the conflict check (conflict fraction > 0.5) and falls back to `whole_field`.
+- **Commits:** `331b946` feat(stitching): derive an a-posteriori reference mask per tile [MI-43], plus the `docs(todo)` commit.
+- **Follow-ups:** the conflict check relies on the measurement order (ring first, SA6); `detection_min_contrast` is a start value until M7; MI-84 (deprecated scikit-image parameter in `clean_structure_mask`, warning only).

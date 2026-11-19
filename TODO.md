@@ -106,14 +106,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 4 — Stitching
 
-- [ ] MI-43: A-posteriori reference mask from detection (G10 SA4, found during MI-40) [phase: 4]
-  - Priority: medium
-  - Size: S
-  - Depends on: –
-  - Done when: when a tile has no a-priori `occupied_um`, `mira.mosaic` derives the reference region from
-    MIRA's structure detection on the tile (`reference_source = "mask_a_posteriori"`) before falling back to
-    `whole_field` with `reference_fraction = 0`; tested on MI-22 fields; the a-priori mask stays the default.
-
 - [ ] MI-42: Size limits [phase: 4]
   - Priority: low
   - Size: S
@@ -220,6 +212,14 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
     error or warning naming the source); the publication scripts pass n = 1.52 explicitly; the MI-04
     regression shows unchanged numbers.
 
+- [ ] MI-84: `clean_structure_mask` uses the deprecated `min_size` of `remove_small_objects` (found during MI-43) [phase: A]
+  - Priority: low
+  - Size: S
+  - Depends on: MI-04
+  - Done when: `processing/detection.clean_structure_mask` calls scikit-image without the `FutureWarning`
+    (`min_size` → `max_size`, which removes objects smaller than **or equal to** the value, so pass
+    `min_size - 1`); the MI-04 regression shows unchanged numbers.
+
 ## In Progress
 <!-- Claude Code moves a todo here when starting work. -->
 
@@ -228,6 +228,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-43: A-posteriori reference mask from detection (G10 SA4) — 2026-11-19 — `mira.mosaic.detect_reference_region` (Otsu split on the unwrapped tile with alternating plane fit, contrast test against the robust substrate noise) used per tile when no `occupied_um` exists; detections that conflict with structure seen by earlier tiles fall back to `whole_field`; stitched result equals the a-priori one within 0.015 rad on MI-22 fields — commits: `331b946`.
 - [x] MI-41: Detection and fit of the calibration marks (G10 SA2) — 2026-11-19 — `mira.calibration_marks`: cross centre (weighted centroid), square corners (sub-pixel lines, symmetry resolved with the prior) → Jacobian, 3 × 3 cross raster → `fit_stage_to_image`; tested on synthetic marks — commits: `750dbf7`.
 - [x] MI-40: Stitching (G10 SA6) — 2026-11-19 — `MosaicConfig.stitching()`: border band, registration against the earlier tile (partial along straight edges), unwrapping per tile with k·2π and consistency flag, global LS piston adjustment with substrate anchors, incremental `MosaicBuilder` → `LayerProduct` — commits: `810784f`, `96a0447`.
 - [x] MI-30: Fusion of a speckle set (M3, M4) — 2026-11-19 — `MosaicConfig.fusion()` of the shared `mira.mosaic` pipeline: registration (stage prior), piston / tilt (MI-21), complex weighted mean with count / `min_count`, noise before / after in the product; mean vs median compared on synthetic data — commits: `810784f`, `96a0447`.

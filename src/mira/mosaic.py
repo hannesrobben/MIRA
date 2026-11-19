@@ -34,10 +34,13 @@ Fusion and stitching are two configurations (:meth:`MosaicConfig.fusion`,
    of the per-tile unwrapped phases (stitching); ``combine="median"`` gives
    the per-pixel median of the tile phases for the comparison of MI-30.
 
-The reference region comes from the a-priori mask (SA1): ``occupied_um``
-polygons in stage µm plus a margin are excluded; without polygons the whole
-field is used with ``reference_fraction = 0`` and the anchoring goes through
-the overlaps.
+The reference region follows the ladder of G10 SA4: the a-priori mask (SA1,
+``occupied_um`` polygons in stage µm plus a margin are excluded) is the
+default; without polygons MIRA's structure detection on each tile gives an
+a-posteriori mask (:func:`detect_reference_region`, MI-43); where the
+detection finds no clear structure / substrate contrast the whole field is
+used with ``reference_fraction = 0`` and the anchoring goes through the
+overlaps.
 """
 
 from __future__ import annotations
@@ -65,6 +68,8 @@ __all__ = [
     "rasterise_polygons",
     "border_band_estimate_um",
     "build_mosaic",
+    "detect_reference_region",
+    "ReferenceDetection",
 ]
 
 _TWO_PI = 2.0 * math.pi
@@ -220,6 +225,19 @@ class MosaicConfig:
         final after K11-T).
     min_overlap_px : int
         Minimum overlap per axis for registration and the global adjustment.
+    reference_detection : {"threshold", "none"}
+        Without an a-priori mask: derive the reference region per tile from
+        the structure detection (``"threshold"``, MI-43) or use the whole
+        field at once (``"none"``).
+    detection_min_contrast : float
+        Minimum structure / substrate contrast of the detection in units of
+        the robust phase noise of the detected substrate; below it the tile
+        falls back to ``whole_field`` (start value until M7).
+    detection_min_size_px : int
+        Detected structure parts smaller than this are ignored.
+    structure_sign : {1, -1}
+        Sign of the structure phase relative to the substrate (G4: more
+        optical path → positive phase).
     """
 
     mode: str
@@ -237,8 +255,18 @@ class MosaicConfig:
     min_reference_fraction: float | None = None
     consistency_max_fraction: float = 0.01
     min_overlap_px: int = 16
+    reference_detection: str = "threshold"
+    detection_min_contrast: float = 5.0
+    detection_min_size_px: int = 50
+    structure_sign: int = 1
 
     def __post_init__(self) -> None:
+        if self.reference_detection not in ("threshold", "none"):
+            raise ValidationError("reference_detection must be 'threshold' or 'none'.")
+        if self.structure_sign not in (1, -1):
+            raise ValidationError("structure_sign must be 1 or -1.")
+        if not self.detection_min_contrast > 0:
+            raise ValidationError("detection_min_contrast must be > 0.")
         if self.mode not in ("fusion", "stitching"):
             raise ValidationError(
                 f"mode must be 'fusion' or 'stitching'; got {self.mode!r}."
@@ -301,6 +329,149 @@ def _unwrap(phase: np.ndarray, valid: np.ndarray) -> np.ndarray:
     masked = np.ma.masked_array(phase, mask=~valid)
     out = unwrap_phase(masked)
     return np.asarray(np.ma.filled(out, 0.0), float)
+
+
+@dataclass(frozen=True)
+class ReferenceDetection:
+    """Result of :func:`detect_reference_region`.
+
+    Parameters
+    ----------
+    reference : numpy.ndarray of bool or None
+        Reference (substrate) region, or None when the detection found no
+        clear structure / substrate contrast.
+    structure : numpy.ndarray of bool
+        Detected structure (before the margin); empty when ``reference`` is
+        None.
+    contrast : float
+        Median structure phase minus median substrate phase, in units of the
+        robust substrate noise (0 when nothing was detected).
+    noise_rad : float or None
+        Robust (MAD) phase noise of the detected substrate after the plane fit.
+    """
+
+    reference: np.ndarray | None
+    structure: np.ndarray
+    contrast: float
+    noise_rad: float | None
+
+    def to_record(self) -> dict:
+        """JSON-ready summary for the tile record."""
+        return {
+            "method": "threshold",
+            "accepted": self.reference is not None,
+            "contrast": float(self.contrast),
+            "noise_rad": self.noise_rad,
+            "structure_px": int(self.structure.sum()),
+        }
+
+
+def _plane(phase: np.ndarray, mask: np.ndarray) -> np.ndarray:
+    """Least-squares plane through ``phase[mask]`` evaluated on the full array."""
+    yy, xx = np.indices(phase.shape, dtype=float)
+    a = np.column_stack([np.ones(mask.sum()), yy[mask], xx[mask]])
+    coef, *_ = np.linalg.lstsq(a, phase[mask], rcond=None)
+    return coef[0] + coef[1] * yy + coef[2] * xx
+
+
+def detect_reference_region(
+    field: np.ndarray,
+    valid: np.ndarray,
+    pixel_um: Sequence[float],
+    *,
+    min_contrast: float = 5.0,
+    margin_um: float = 0.0,
+    min_size_px: int = 50,
+    structure_sign: int = 1,
+    iterations: int = 3,
+) -> ReferenceDetection:
+    """A-posteriori reference region of one tile (G10 SA4, MI-43).
+
+    The wrapped phase of the tile is unwrapped (``fast2d``); a plane is fitted
+    to the current substrate estimate (first: all valid pixels) and removed;
+    the structure is the Otsu class above the threshold
+    (:func:`mira.processing.detection.threshold_detection`, cleaned with
+    :func:`~mira.processing.detection.clean_structure_mask`). Plane fit and
+    detection alternate ``iterations`` times. The detection is accepted only
+    if the structure / substrate contrast exceeds ``min_contrast`` times the
+    robust substrate noise; a tile that lies entirely on the structure or on
+    the substrate shows no such contrast and is rejected (the caller falls
+    back to ``whole_field``).
+
+    Parameters
+    ----------
+    field : numpy.ndarray (complex)
+        Tile field; only ``valid`` pixels are used.
+    valid : numpy.ndarray of bool
+    pixel_um : sequence of float
+        Pixel size ``(y, x)`` for the margin.
+    min_contrast : float, optional
+        Acceptance threshold in units of the substrate noise.
+    margin_um : float, optional
+        Dilation of the structure before the complement is taken.
+    min_size_px : int, optional
+        Structure parts smaller than this are ignored.
+    structure_sign : {1, -1}, optional
+        Sign of the structure phase relative to the substrate.
+    iterations : int, optional
+        Alternations of plane fit and detection.
+
+    Returns
+    -------
+    ReferenceDetection
+    """
+    from .processing.detection import clean_structure_mask, threshold_detection
+
+    valid = np.asarray(valid, bool)
+    empty = np.zeros(valid.shape, bool)
+    if valid.sum() < 4 * max(min_size_px, 16):
+        return ReferenceDetection(None, empty, 0.0, None)
+    phase = _unwrap(np.angle(field), valid)
+    substrate = valid.copy()
+    structure = empty
+    resid = phase
+    for _ in range(max(1, int(iterations))):
+        if substrate.sum() < 16:
+            return ReferenceDetection(None, empty, 0.0, None)
+        # first pass: piston only (a plane through a step would tilt the
+        # residual and lock Otsu onto the wrong half); then plane on substrate
+        base = (
+            np.median(phase[valid]) if structure is empty else _plane(phase, substrate)
+        )
+        resid = structure_sign * (phase - base)
+        values = resid[valid]
+        if np.ptp(values) <= 0:  # constant field: nothing to separate
+            return ReferenceDetection(None, empty, 0.0, None)
+        raw = empty.copy()
+        raw[valid] = threshold_detection(values, threshold_method="otsu")
+        structure = (
+            clean_structure_mask(
+                raw,
+                remove_small=True,
+                min_size=int(min_size_px),
+                fill_holes=True,
+                keep_largest=False,
+            )
+            & valid
+        )
+        substrate = valid & ~structure
+    if not structure.any() or substrate.sum() < 16:
+        return ReferenceDetection(None, empty, 0.0, None)
+    sub = resid[substrate]
+    noise = float(1.4826 * np.median(np.abs(sub - np.median(sub))))
+    contrast = float((np.median(resid[structure]) - np.median(sub)) / max(noise, 1e-12))
+    if contrast < min_contrast:
+        return ReferenceDetection(None, structure, contrast, noise)
+    excluded = structure
+    if margin_um > 0:
+        dist = ndimage.distance_transform_edt(
+            ~structure, sampling=tuple(float(v) for v in pixel_um)
+        )
+        excluded = dist <= margin_um
+    reference = valid & ~excluded
+    if reference.sum() < 16:
+        return ReferenceDetection(None, structure, contrast, noise)
+    return ReferenceDetection(reference, structure, contrast, noise)
 
 
 def _valid_box(field: np.ndarray, valid: np.ndarray, grid: Grid):
@@ -371,14 +542,17 @@ class MosaicBuilder:
         self.config = config
         self.product_id = product_id
         self.metadata = dict(metadata or {})
-        if occupied_um:
+        self._a_priori = bool(occupied_um)
+        if self._a_priori:
             self._reference = ~rasterise_polygons(
                 occupied_um, grid, config.reference_margin_um
             )
-            self._reference_source = "mask_a_priori"
         else:
             self._reference = np.ones(grid.shape, bool)
-            self._reference_source = "whole_field"
+        # a-posteriori masks (MI-43): substrate seen by a tile's detection and
+        # structure seen by any tile, on the mosaic lattice
+        self._ref_seen = np.zeros(grid.shape, bool)
+        self._struct_seen = np.zeros(grid.shape, bool)
         self._acc = np.zeros(grid.shape, np.complex128)
         self._wacc = np.zeros(grid.shape)
         self._pacc = np.zeros(grid.shape)
@@ -393,6 +567,59 @@ class MosaicBuilder:
     def tiles(self) -> tuple:
         """Records of the tiles added so far."""
         return tuple(dict(t.record) for t in self._tiles)
+
+    @property
+    def reference_source(self) -> str:
+        """D13 key of the mosaic: a-priori mask, a-posteriori mask or whole field."""
+        if self._a_priori:
+            return "mask_a_priori"
+        if any(
+            t.record["reference_source"] == "mask_a_posteriori" for t in self._tiles
+        ):
+            return "mask_a_posteriori"
+        return "whole_field"
+
+    def _global_reference(self) -> np.ndarray:
+        """Reference region on the whole lattice for the product-level numbers."""
+        if self._a_priori or not self._ref_seen.any():
+            return self._reference
+        return self._ref_seen & ~self._struct_seen
+
+    def _tile_reference(self, field: np.ndarray, valid: np.ndarray, sl):
+        """Reference region, D13 source and detection record of one placed tile."""
+        if self._a_priori:
+            return self._reference[sl] & valid, "mask_a_priori", None
+        cfg = self.config
+        if cfg.reference_detection == "none":
+            return valid.copy(), "whole_field", None
+        det = detect_reference_region(
+            field,
+            valid,
+            self.grid.pixel_um,
+            min_contrast=cfg.detection_min_contrast,
+            margin_um=cfg.reference_margin_um,
+            min_size_px=cfg.detection_min_size_px,
+            structure_sign=cfg.structure_sign,
+        )
+        record = det.to_record()
+        if det.reference is None:
+            return valid.copy(), "whole_field", record
+        # A raised feature on a plateau looks like structure on substrate. The
+        # tiles measured before are ground truth (SA6, ring first): if most of
+        # the detected substrate that they already saw is structure there, the
+        # detection is rejected; otherwise their structure is removed from it.
+        seen_struct = self._struct_seen[sl] & det.reference
+        known = (self._ref_seen[sl] | self._struct_seen[sl]) & det.reference
+        record["conflict_fraction"] = float(seen_struct.sum() / max(known.sum(), 1))
+        reference = det.reference & ~seen_struct
+        if (
+            known.sum() >= 16 and record["conflict_fraction"] > 0.5
+        ) or reference.sum() < 16:
+            record["accepted"] = False
+            return valid.copy(), "whole_field", record
+        self._ref_seen[sl] |= reference
+        self._struct_seen[sl] |= valid & ~det.reference
+        return reference, "mask_a_posteriori", record
 
     def _placement(self, tile_grid: Grid):
         """Integer placement and fractional shift of a tile on the lattice."""
@@ -546,7 +773,7 @@ class MosaicBuilder:
         if placed is None:
             raise ValidationError(f"Tile {index} lies outside the mosaic grid.")
         sl, field, valid = placed
-        reference = self._reference[sl] & valid
+        reference, ref_source, detection = self._tile_reference(field, valid, sl)
         ref_fraction = float(reference.sum() / max(valid.sum(), 1))
         sub_grid = Grid(
             (
@@ -650,9 +877,9 @@ class MosaicBuilder:
                 "anchor": anchor,
                 "residual_rad": fit.residual_rad if fit else None,
                 "border_band_um": cfg.border_band_um,
-                "reference_source": self._reference_source,
+                "reference_source": ref_source,
                 "reference_fraction": (
-                    ref_fraction if self._reference_source != "whole_field" else 0.0
+                    ref_fraction if ref_source != "whole_field" else 0.0
                 ),
                 "unwrap": unwrap_info,
                 "flagged": flagged,
@@ -664,6 +891,8 @@ class MosaicBuilder:
         )
         if registration is not None:
             tile.record["registration"]["reference_tile"] = registration_ref
+        if detection is not None:
+            tile.record["reference_detection"] = detection
         tile.box_field, tile.box_grid = self._box(tile)
         self._tiles.append(tile)
         self._accumulate(tile)
@@ -715,7 +944,7 @@ class MosaicBuilder:
             ref = t.reference
             frac = ref.sum() / max(t.valid.sum(), 1)
             if (
-                self._reference_source == "whole_field"
+                t.record["reference_source"] == "whole_field"
                 or frac < self.config.anchor_min_fraction
             ):
                 continue
@@ -773,7 +1002,7 @@ class MosaicBuilder:
             phase = np.angle(field)
             if cfg.unwrap == "fast2d" and valid.any():
                 phase = _unwrap(phase, valid)
-                ref = valid & self._reference
+                ref = valid & self._global_reference()
                 level = phase[ref].mean() if ref.any() else phase[valid].mean()
                 phase = phase - _TWO_PI * np.round(level / _TWO_PI)
         elif cfg.combine == "median":
@@ -787,7 +1016,7 @@ class MosaicBuilder:
             phase = phase_tiles
         intensity = np.where(valid, np.abs(field) ** 2, 0.0)
         phase = np.where(valid, phase, 0.0)
-        ref = valid & self._reference
+        ref = valid & self._global_reference()
         noise_after = (
             reference_noise(field, ref, detrend="plane").sigma_rad
             if ref.sum() >= 16
@@ -814,7 +1043,7 @@ class MosaicBuilder:
             "phase_noise_tiles_median_rad": (
                 float(np.median(noise_before)) if noise_before else None
             ),
-            "reference_source": self._reference_source,
+            "reference_source": self.reference_source,
             "config": cfg.to_dict(),
         }
         meta = dict(self.metadata)
