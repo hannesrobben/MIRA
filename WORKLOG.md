@@ -405,3 +405,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: 220 passed, 2 skipped, 1 xfailed (Python 3.12 `.venv`). Measured on MI-22 raster fields (Office PC, seeds 5–10, margin 2 µm): a-posteriori vs a-priori stitched phase |Δmean| ≤ 0.015 rad, std within 4 %; ring tiles detect, the centre tile (disc on plateau) is rejected by the conflict check (conflict fraction > 0.5) and falls back to `whole_field`.
 - **Commits:** `331b946` feat(stitching): derive an a-posteriori reference mask per tile [MI-43], plus the `docs(todo)` commit.
 - **Follow-ups:** the conflict check relies on the measurement order (ring first, SA6); `detection_min_contrast` is a start value until M7; MI-84 (deprecated scikit-image parameter in `clean_structure_mask`, warning only).
+
+### 2026-11-19 08:44 CET — [MI-42] Size limits
+- **Status:** done
+- **Changes:**
+  - `src/mira/mosaic.py`: builder state (accumulators, stored tile fields / phases, median stack) in complex64 / float32; new `mosaic_memory_bytes` with measured coefficients
+  - `tests/test_mosaic.py`: dtype test; measured memory vs estimate for 3 × 3 and 4 × 4 rasters (±20 %)
+  - `TODO.md`: MI-42 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 223 passed, 2 skipped, 1 xfailed. Measured with `tracemalloc` (Office PC, tiles 128² and 256²): state 23 B per mosaic pixel + 14 B per tile pixel (ratio to the estimate 1.00–1.01), add_tile temporaries ≈ 204 B per tile pixel, close ≈ 76–85 B per mosaic pixel. Extrapolated: 300 µm at 63x (1725², 7 × 7 tiles of 512²) ≈ 250 MB state, ≈ 520 MB peak, ≈ 1.1 GB with `combine="median"`.
+- **Commits:** `f6a93fb` perf(stitching): keep the mosaic state in 32 bit and estimate memory [MI-42], plus the `docs(todo)` commit.
+- **Follow-ups:** none; the numbers should be re-measured on the DHM-PC with the worker pool (MI-60 / DL-B9).
