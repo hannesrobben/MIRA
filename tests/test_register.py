@@ -22,6 +22,7 @@ SCENE = SyntheticScene(
         Feature("disc", (6.0, 9.0), (3.0, 3.0), phase_rad=1.3),
     )
 )
+ISO = 0.05  # minimum isotropy used in these tests (M7 pending)
 CONF = 0.1  # minimum confidence used in these tests (M7 pending)
 
 
@@ -66,6 +67,7 @@ def test_recovers_stage_error_noise_free(error):
         ref.stage_grid,
         pose_tolerance_um=1.5,
         min_confidence=CONF,
+        min_isotropy=ISO,
     )
     assert not reg.flagged and reg.method == "phase_correlation"
     # Truth: true minus reported position = -stage_error; 0.015 µm = 1.5 upsampling steps.
@@ -90,6 +92,7 @@ def test_recovers_stage_error_with_speckle_noise():
             ref.stage_grid,
             pose_tolerance_um=1.5,
             min_confidence=CONF,
+            min_isotropy=ISO,
         )
         assert not reg.flagged
         errors.append(np.array(reg.shift_um) + np.array([0.4, -0.3]))
@@ -113,6 +116,7 @@ def test_other_signals(signal):
         ref.stage_grid,
         pose_tolerance_um=1.5,
         min_confidence=CONF,
+        min_isotropy=ISO,
         signal=signal,
     )
     np.testing.assert_allclose(reg.shift_um, (-0.3, -0.2), atol=0.03)
@@ -127,7 +131,8 @@ def test_featureless_substrate_falls_back_to_stage():
         ref.field,
         ref.stage_grid,
         pose_tolerance_um=1.5,
-        min_confidence=0.5,
+        min_confidence=0.2,
+        min_isotropy=ISO,
     )
     assert reg.flagged and reg.method == "stage_prior"
     assert reg.shift_um == (0.0, 0.0)
@@ -144,6 +149,7 @@ def test_small_or_missing_overlap_falls_back():
         ref.stage_grid,
         pose_tolerance_um=1.0,
         min_confidence=CONF,
+        min_isotropy=ISO,
     )
     assert reg.flagged and "overlap" in reg.reason
     ref, mov = _pair((0.0, 0.0), offset=(0.0, 40.0))
@@ -154,6 +160,7 @@ def test_small_or_missing_overlap_falls_back():
         ref.stage_grid,
         pose_tolerance_um=1.0,
         min_confidence=CONF,
+        min_isotropy=ISO,
     )
     assert reg.flagged and reg.reason == "no overlap"
 
@@ -167,6 +174,7 @@ def test_error_beyond_tolerance_is_not_found():
         ref.stage_grid,
         pose_tolerance_um=0.6,
         min_confidence=0.9,
+        min_isotropy=ISO,
     )
     assert reg.flagged
 
@@ -181,6 +189,7 @@ def test_validation():
             ref.stage_grid,
             pose_tolerance_um=1.0,
             min_confidence=CONF,
+            min_isotropy=ISO,
             signal="x",
         )
     with pytest.raises(ValidationError, match="shapes"):
@@ -191,4 +200,46 @@ def test_validation():
             ref.stage_grid,
             pose_tolerance_um=1.0,
             min_confidence=CONF,
+            min_isotropy=ISO,
         )
+
+
+def test_edge_only_overlap_registers_the_normal_only():
+    """A straight edge fixes the shift across it, not along it (isotropy
+    measured 0.002-0.004; 2-D scenes 0.44-0.61)."""
+    edge = SyntheticScene(
+        (Feature("rect", (0, 0), (30, 30), phase_rad=9.0, edge_um=1.5),)
+    )
+    for seed in range(4):
+        a = make_tile(
+            edge,
+            (-15, -15),
+            SHAPE,
+            PIXEL,
+            noise=SpeckleNoise(sigma_t_rad=0.1),
+            rng=seed,
+        )
+        b = make_tile(
+            edge,
+            (-15, 0),
+            SHAPE,
+            PIXEL,
+            noise=SpeckleNoise(sigma_t_rad=0.1),
+            rng=seed + 20,
+            stage_error_um=(0.2, -0.8),
+        )
+        reg = register_pair(
+            b.field,
+            b.stage_grid,
+            a.field,
+            a.stage_grid,
+            pose_tolerance_um=1.0,
+            min_confidence=CONF,
+            min_isotropy=ISO,
+        )
+        assert reg.method == "phase_correlation_partial" and not reg.flagged, reg
+        assert reg.isotropy < 0.01
+        assert reg.shift_um[0] == pytest.approx(-0.2, abs=0.02)
+        assert abs(reg.shift_um[1]) < 0.01  # stage prior kept along the edge
+        (direction,) = reg.undetermined_directions
+        assert abs(direction[1]) > 0.99
