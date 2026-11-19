@@ -871,7 +871,9 @@ class MosaicBuilder:
         # 5. unwrapping and k * 2 pi
         wrapped = np.angle(field)
         unwrap_info: dict[str, Any] = {
-            "method": cfg.unwrap if cfg.phase_from == "tiles" else "none"
+            "method": cfg.unwrap if cfg.phase_from == "tiles" else "none",
+            "k_offset": 0,
+            "consistent": True,
         }
         phase = wrapped
         if cfg.phase_from == "tiles" and cfg.unwrap == "fast2d":
@@ -926,10 +928,11 @@ class MosaicBuilder:
                 "registration": (
                     registration.to_record()
                     if registration
-                    else {"method": "first_tile"}
+                    else {"method": "first_tile", "shift_um": [0.0, 0.0]}
                 ),
-                "piston_rad": fit.piston_rad if fit else None,
-                "tilt_rad_per_um": list(fit.tilt_rad_per_um) if fit else None,
+                # nothing removed without a fit (contract: numbers, not null)
+                "piston_rad": fit.piston_rad if fit else 0.0,
+                "tilt_rad_per_um": list(fit.tilt_rad_per_um) if fit else [0.0, 0.0],
                 "anchor": anchor,
                 "residual_rad": fit.residual_rad if fit else None,
                 "border_band_um": cfg.border_band_um,
@@ -1013,7 +1016,7 @@ class MosaicBuilder:
             rows.append(row)
             rhs.append(level)
             wts.append(10.0 * math.sqrt(ref.sum()))
-            t.record["anchor"] = "reference_region"
+            t.record["anchor"] = "ring_substrate"
             anchors += 1
         if anchors == 0:
             row = np.zeros(n)
@@ -1025,12 +1028,17 @@ class MosaicBuilder:
         b = np.array(rhs) * np.array(wts)
         corr, *_ = np.linalg.lstsq(a, b, rcond=None)
         resid = np.array(rows) @ corr - np.array(rhs)
+        matrix = np.array(rows)
+        pairs = (matrix != 0).sum(axis=1) == 2
         for i, t in enumerate(self._tiles):
-            used = np.array(rows)[:, i] != 0
+            used = matrix[:, i] != 0
             t.record["residual_rad"] = (
                 float(np.sqrt(np.mean(resid[used] ** 2))) if used.any() else None
             )
             t.record["global_piston_rad"] = float(corr[i])
+            if t.record["anchor"] == "first_tile":
+                # contract enum (SA6): anchored through overlaps or not at all
+                t.record["anchor"] = "overlap" if (used & pairs).any() else "none"
         return corr
 
     def close(self, *, include_field: bool = True) -> LayerProduct:
