@@ -353,3 +353,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: 185 passed, 2 skipped, 1 xfailed (Python 3.12 `.venv`).
 - **Commits:** `7550d4f` feat(geometry): add the stage-to-image model and its LS fit [MI-11], plus the `docs(todo)` commit.
 - **Follow-ups:** the calibration file format should become a contract in `dhmconnect/schemas` (todo added in DHMConnect); nanofactorysystem T104 writes the file (note added there); the fallback tolerance is stated by the caller until `pose_tolerance_um` is measured (T104).
+
+### 2026-11-19 07:53 CET — [MI-20] Registration by position and image
+- **Status:** done
+- **Changes:**
+  - `src/mira/register.py` (new): `register_pair` (stage prior + phase correlation restricted to the pose tolerance, spectral low-pass, upsampled-DFT sub-pixel step, second pass against the window bias), `TileRegistration` (shift, confidence, method, flag, reason; `to_record()` for `TileRecord.registration`), `corrected_grid`
+  - `tests/test_register.py` (new): 11 tests
+  - `TODO.md`: MI-20 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 196 passed, 2 skipped, 1 xfailed. Measured on MI-22 fields (Office PC, 20 seeds, 128² px of 0.2 µm, offset (3, 9) µm, stage error (0.4, −0.3) µm): white noise 0.3 rad, 1 frame: rms 0.050 µm; 10 frames: 0.017 µm; unbiased (|mean| < 0.01 µm). Full whitening without low-pass: 0.73 µm rms (rejected).
+- **Commits:** `1e1c3b4` feat(registration): register products by stage prior and image [MI-20], plus the `docs(todo)` commit.
+- **Follow-ups:** `min_confidence` has no default until M7; the refiners in `processing/registration.py` were reviewed but not reused because they cannot restrict the search window (the coherent pattern peak would win); ECC stays affected by MI-79.

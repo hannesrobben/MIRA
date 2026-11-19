@@ -102,17 +102,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ### Phase 2 — Registration
 
-- [ ] MI-20: Registration by position and image [phase: 2]
-  - Priority: high
-  - Size: L
-  - Depends on: MI-11, MI-22
-  - Done when:
-    - coarse placement from the stage position (prior) and MI-11, then sub-pixel phase correlation
-      restricted to the overlap and to the pose tolerance (`pose_tolerance_um`), reusing the refiners in
-      `processing/registration.py`;
-    - returns transform and a confidence value; low confidence falls back to the stage position and is
-      flagged; tested on MI-22 fields.
-
 ### Phase 3 — Speckle fusion
 
 - [ ] MI-30: Fusion of a speckle set (M3, M4) [phase: 3]
@@ -287,6 +276,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-20: Registration by position and image — 2026-11-19 — `mira.register.register_pair`: stage prior + phase correlation restricted to the pose tolerance (excludes the optics-fixed pattern peak), spectral low-pass, sub-pixel upsampled DFT, two passes; confidence with stage fallback and flag — commits: `1e1c3b4`.
 - [x] MI-11: Stage-to-image geometry — 2026-11-19 — `mira.geometry.StageToImage` (affine J + offset per objective and device), nominal fallback with caller-stated tolerance, LS fit from mark observations (3 × 3 raster independent of the galvo scale), proposed `StageImageCalibration` 1.0 file; nanofactorysystem `Transform` convertible via `from_xy_matrix` — commits: `7550d4f`.
 - [x] MI-53: Stable entry point and report format — 2026-11-18 — `mira.api.evaluate_layer(product, target, context, settings)` → `DeviationReport` 1.0 with `schema_version`, `domain`, `timings_s.evaluate`, optics and versions; checked against the shared example and the DHMConnect validator — commits: `f513ef0`.
 - [x] MI-52: Comparison — 2026-11-18 — `mira.deviation.compare` → `DeviationReport` 1.0: substrate levelling, deviation map, RMSE / MAE / sigma, per-segment statistics, ±k·sigma classification, validity flags; thresholds stay empty until M7 — commits: `0cf5379`.
