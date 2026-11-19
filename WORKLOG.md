@@ -363,3 +363,13 @@ Format and rules: see "Work log (mandatory)" in CLAUDE.md. Earlier work is summa
 - **Tests:** `python -m pytest`: 196 passed, 2 skipped, 1 xfailed. Measured on MI-22 fields (Office PC, 20 seeds, 128² px of 0.2 µm, offset (3, 9) µm, stage error (0.4, −0.3) µm): white noise 0.3 rad, 1 frame: rms 0.050 µm; 10 frames: 0.017 µm; unbiased (|mean| < 0.01 µm). Full whitening without low-pass: 0.73 µm rms (rejected).
 - **Commits:** `1e1c3b4` feat(registration): register products by stage prior and image [MI-20], plus the `docs(todo)` commit.
 - **Follow-ups:** `min_confidence` has no default until M7; the refiners in `processing/registration.py` were reviewed but not reused because they cannot restrict the search window (the coherent pattern peak would win); ECC stays affected by MI-79.
+
+### 2026-11-19 07:55 CET — [MI-31] Noise metrics
+- **Status:** done
+- **Changes:**
+  - `src/mira/noise.py` (new): `reference_noise` / `NoiseStats`, `radial_psd`, `correlation_length_um`, `fit_noise_model` / `NoiseModel`, `positions_needed`
+  - `tests/test_noise.py` (new): 6 tests
+  - `TODO.md`: MI-31 to Done; `WORKLOG.md`: this entry
+- **Tests:** `python -m pytest`: 202 passed, 2 skipped, 1 xfailed.
+- **Commits:** `0d93431` feat(analysis): add shared noise metrics and the M4 noise model [MI-31], plus the `docs(todo)` commit.
+- **Follow-ups:** MI-75 replaces `radial_psd` by a wrapper around OffAxisHolo P15; OffAxisHolo K13 should report its N-study with `mira.noise.reference_noise` when MIRA is available (note in OffAxisHolo K13).

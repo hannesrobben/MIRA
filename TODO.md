@@ -117,17 +117,6 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
       a comparison of the phase median (noise in the substrate, edge sharpness) on synthetic data exist;
     - all parameters are configurable with the start values of nanofactorysystem T85.
 
-- [ ] MI-31: Noise metrics [phase: 3]
-  - Priority: medium
-  - Size: S
-  - Depends on: –
-  - Done when: shared functions for the noise in a reference region and its spectrum (reusing the
-    ensemble statistics and PSD tools, see MI-75) exist, so that fusion, the N-study (OffAxisHolo K13)
-    and the comparison report the same number;
-    - the speckle / position study (M4, with K13) can be run from them: noise vs. frames (fixed
-      positions), noise vs. positions (fixed frames), minimum number of positions, correlation length of
-      the coherent noise pattern; model σ² ≈ σ²_t / (N_frames · N_pos) + σ²_coh / N_pos.
-
 ### Phase 4 — Stitching
 
 - [ ] MI-40: Stitching (G10 SA6) [phase: 4]
@@ -276,6 +265,7 @@ paper; MI-76 (ICC check, done) before any ICC number is published.
 
 ## Done
 <!-- Claude Code adds: - [x] MI-<n>: title — YYYY-MM-DD — 1–2 sentences on what changed — commits: `<sha>`, … -->
+- [x] MI-31: Noise metrics — 2026-11-19 — `mira.noise`: reference-region noise (plane / piston detrend, complex input), radial PSD, correlation length, LS fit of the M4 model σ² = σt²/(Nf·Np) + σcoh²/Np and `positions_needed` — commits: `0d93431`.
 - [x] MI-20: Registration by position and image — 2026-11-19 — `mira.register.register_pair`: stage prior + phase correlation restricted to the pose tolerance (excludes the optics-fixed pattern peak), spectral low-pass, sub-pixel upsampled DFT, two passes; confidence with stage fallback and flag — commits: `1e1c3b4`.
 - [x] MI-11: Stage-to-image geometry — 2026-11-19 — `mira.geometry.StageToImage` (affine J + offset per objective and device), nominal fallback with caller-stated tolerance, LS fit from mark observations (3 × 3 raster independent of the galvo scale), proposed `StageImageCalibration` 1.0 file; nanofactorysystem `Transform` convertible via `from_xy_matrix` — commits: `7550d4f`.
 - [x] MI-53: Stable entry point and report format — 2026-11-18 — `mira.api.evaluate_layer(product, target, context, settings)` → `DeviationReport` 1.0 with `schema_version`, `domain`, `timings_s.evaluate`, optics and versions; checked against the shared example and the DHMConnect validator — commits: `f513ef0`.
